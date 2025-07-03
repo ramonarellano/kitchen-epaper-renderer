@@ -1,0 +1,10 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"type": "shell",
+			"label": "Deploy epaper to Google Cloud Functions",
+			"command": "gcloud functions deploy epaper --runtime=python310 --trigger-http --allow-unauthenticated --entry-point=epaper --region=europe-north1 --set-env-vars=CALENDAR_ID=your_cal_id@group.calendar.google.com,YR_LAT=59.91,YR_LON=10.75,SECRET_NAME=projects/12345/secrets/calendar-sa-key"
+		}
+	]
+}
