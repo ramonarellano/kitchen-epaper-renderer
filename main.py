@@ -120,7 +120,7 @@ def render_image(events, weather):
     wx_x = cal_w + margin
     draw.text((wx_x, margin), "Today's Weather:", font=font_header, fill=(0,0,0))
     wx_txt, wx_icon = weather
-    icon_img = weather_icons[wx_icon].resize((60,60), Image.ANTIALIAS)
+    icon_img = weather_icons[wx_icon].resize((60,60), Image.Resampling.LANCZOS)
     img.paste(icon_img, (wx_x, margin+40), icon_img)
 
     # temperature in red

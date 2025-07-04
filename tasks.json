@@ -9,7 +9,7 @@
     {
       "label": "Run epaper locally with env vars",
       "type": "shell",
-      "command": "export GOOGLE_APPLICATION_CREDENTIALS=\"/Users/ramon.arellano/Documents/Github/google-service-account/kitche-epaper-renderer-83308b27697a.json\" && export CALENDAR_ID=48otkcqvhjlqlogfkgic7labis@group.calendar.google.com && export YR_LAT=59.91 && export YR_LON=10.75 && export SECRET_NAME=projects/14548432634/secrets/kitchen-epaper-renderer-google-calendar-secret && functions-framework --target=epaper --port=8080",
+      "command": "lsof -ti:8080 | xargs kill -9 2>/dev/null; export GOOGLE_APPLICATION_CREDENTIALS=\"/Users/ramon.arellano/Documents/Github/google-service-account/kitche-epaper-renderer-83308b27697a.json\" && export CALENDAR_ID=48otkcqvhjlqlogfkgic7labis@group.calendar.google.com && export YR_LAT=59.91 && export YR_LON=10.75 && export SECRET_NAME=projects/14548432634/secrets/kitchen-epaper-renderer-google-calendar-secret && functions-framework --target=epaper --port=8080",
       "isBackground": true,
       "problemMatcher": []
     }

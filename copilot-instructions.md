@@ -1,9 +1,11 @@
 # Copilot Instructions
 
 # Purpose
+
 This file provides workspace-specific instructions for GitHub Copilot and Copilot Chat to ensure consistent, context-aware code suggestions and automation for the kitchen-epaper-renderer project.
 
 # Guidelines
+
 - Always use relative paths for local development (e.g., `icons/png` for icons).
 - When referencing icons in code, only use PNG files that are guaranteed to exist in the `icons/png` directory.
 - For weather icon mapping, default to `cloudy.png` if unsure or if a specific icon is missing.
@@ -21,5 +23,6 @@ This file provides workspace-specific instructions for GitHub Copilot and Copilo
 - When running the application locally, always use the "Run epaper locally with env vars" task and check the terminal for errors automatically.
 
 # Usage
+
 - This file should be named `copilot-instructions.md` and placed in the project root.
 - Copilot and Copilot Chat should always consider these instructions for all code completions and automation in this workspace.
