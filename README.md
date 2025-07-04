@@ -122,6 +122,17 @@ Set the following environment variables for your deployment (Cloud Function, loc
 
 ---
 
+## TODO: Add API Key Security
+- Add a secret in Google Cloud Secret Manager (e.g. `kitchen-epaper-display-apikey`) containing a random API key. (Done)
+- Grant Secret Manager Secret Accessor role to the Cloud Function's runtime service account(s) for this secret. (Done)
+- Set the secret's resource name as an environment variable (e.g. `API_KEY_SECRET_NAME`).
+- In the code, load the API key from Secret Manager at startup.
+- Require clients to provide the API key as a query parameter (`?api_key=...`) or HTTP header (`X-API-Key`).
+- In the endpoint, check the provided key and return 401 Unauthorized if it does not match.
+- Document the usage for clients in the README.
+
+---
+
 ## References
 - [Google Cloud Console](https://console.cloud.google.com/)
 - [Met.no Weather API](https://api.met.no/weatherapi/locationforecast/2.0/documentation)
