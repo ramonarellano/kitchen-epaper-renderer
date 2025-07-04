@@ -21,7 +21,7 @@ ROBOTO_PATH = os.path.join(FONT_DIR, 'Roboto-Regular.ttf')
 font_header = ImageFont.truetype(ROBOTO_PATH, 24)  # match left-side title size
 font_date   = ImageFont.truetype(ROBOTO_PATH, 24)  # smaller date title font
 font_event  = ImageFont.truetype(ROBOTO_PATH, 20)  # smaller event name font
-font_weather= ImageFont.truetype(ROBOTO_PATH, 24)
+font_weather= ImageFont.truetype(ROBOTO_PATH, 20)
 font_small  = ImageFont.truetype(ROBOTO_PATH, 18)
 weather_icons = {
     'cloudy': Image.open(f'{ICON_DIR}/cloudy-day-3.png'),
@@ -205,9 +205,9 @@ def render_image(events, weather):
     draw.text((wx_x, margin), f"Oslo idag {today}", font=font_date, fill=(0,0,0))  # Match left-side title size
     y_wx = margin + font_date.size + 10
     # Make weather rows and icons larger to fill the image
-    row_h = int((H - y_wx - margin) / 8)  # fewer rows, more space
-    icon_size = min(row_h-4, 72)           # larger icons
-    for period in weather[:8]:            # show 8 periods to match new row count
+    row_h = int((H - y_wx - margin) / 8) + 8  # increase row spacing
+    icon_size = min(row_h-2, 96)              # larger icons, up to 96px
+    for period in weather[:8]:                # show 8 periods to match new row count
         hour = period['hour']
         temp = period['temp']
         wind = period['wind']
@@ -215,10 +215,12 @@ def render_image(events, weather):
         icon = period['icon']
         icon_img = weather_icons[icon].resize((icon_size,icon_size), Image.Resampling.LANCZOS)
         img.paste(icon_img, (wx_x, y_wx), icon_img)
-        draw.text((wx_x+icon_size+8, y_wx+2), f"{hour:02d}:00", font=font_small, fill=(0,0,0))
-        draw.text((wx_x+icon_size+70, y_wx+2), f"{int(temp)}°C", font=font_weather, fill=(200,0,0))
-        draw.text((wx_x+icon_size+140, y_wx+2), f"{precip:.1f}mm", font=font_small, fill=(0,0,0))
-        draw.text((wx_x+icon_size+210, y_wx+2), f"{wind:.1f}m/s", font=font_small, fill=(0,0,0))
+        # Vertically center the text relative to the icon
+        text_y = y_wx + (icon_size - font_weather.size) // 2
+        draw.text((wx_x+icon_size+8, text_y), f"{hour:02d}:00", font=font_weather, fill=(0,0,0))
+        draw.text((wx_x+icon_size+70, text_y), f"{int(temp)}°C", font=font_weather, fill=(200,0,0))
+        draw.text((wx_x+icon_size+140, text_y), f"{precip:.1f}mm", font=font_weather, fill=(0,0,0))
+        draw.text((wx_x+icon_size+230, text_y), f"{wind:.1f}m/s", font=font_weather, fill=(0,0,0))
         y_wx += row_h
     # return PNG bytes
     buf = io.BytesIO()

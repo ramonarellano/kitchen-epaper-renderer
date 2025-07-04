@@ -48,6 +48,35 @@ This project renders an image for a Waveshare 7.3" e-paper display, showing:
 - Name it (e.g. `calendar-sa-key`)
 - Upload the JSON key file
 
+### 5b. Grant Secret Accessor Role to Service Account
+After creating your secret in Secret Manager, you must grant your service account access:
+1. Go to [Secret Manager](https://console.cloud.google.com/security/secret-manager) in Google Cloud Console.
+2. Click on your secret (e.g. `calendar-sa-key`).
+3. Go to the "Permissions" tab.
+4. Click "Grant Access".
+5. Enter your service account email (from the JSON key file).
+6. Add the role: **Secret Manager Secret Accessor** (`roles/secretmanager.secretAccessor`).
+7. Click "Save".
+
+### 5c. Grant Secret Accessor Role to Cloud Function Runtime Accounts
+In addition to your custom service account, you must grant the **Secret Manager Secret Accessor** role to the service account(s) that your Cloud Function runs as. This is required for the function to access secrets at runtime.
+
+Typical accounts to grant:
+- The default Compute Engine service account: `[PROJECT_NUMBER]-compute@developer.gserviceaccount.com`
+- The App Engine default service account: `[PROJECT_ID]@appspot.gserviceaccount.com`
+- Any custom service account you assign to the function
+
+**How to grant access:**
+1. Go to [Secret Manager](https://console.cloud.google.com/security/secret-manager) in Google Cloud Console.
+2. Click on your secret (e.g. `calendar-sa-key`).
+3. Go to the "Permissions" tab.
+4. Click "Grant Access".
+5. Enter the service account email(s) listed above.
+6. Add the role: **Secret Manager Secret Accessor** (`roles/secretmanager.secretAccessor`).
+7. Click "Save".
+
+> Example: For project 14548432634, grant to both `14548432634-compute@developer.gserviceaccount.com` and `kitche-epaper-renderer@appspot.gserviceaccount.com`.
+
 ### 6. Share Your Google Calendar with the Service Account
 - Open your Google Calendar in a browser
 - Go to "Settings and sharing" for the calendar you want to use
