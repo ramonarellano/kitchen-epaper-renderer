@@ -3,6 +3,7 @@ from PIL import Image, ImageDraw, ImageFont
 from googleapiclient.discovery import build
 from google.oauth2 import service_account
 from google.cloud import secretmanager
+import logging
 
 # env vars (set these when deploying)
 CALENDAR_ID = os.environ['CALENDAR_ID']
@@ -10,11 +11,14 @@ YR_LAT      = os.environ['YR_LAT']
 YR_LON      = os.environ['YR_LON']
 SECRET_NAME = os.environ['SECRET_NAME']  # e.g. "projects/12345/secrets/calendar-sa-key"
 
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+
 # Load icons & fonts once on cold start
 ICON_DIR = 'icons/png'  # Use relative path for local dev
 FONT_DIR = 'fonts'
 ROBOTO_PATH = os.path.join(FONT_DIR, 'Roboto-Regular.ttf')
-font_header = ImageFont.truetype(ROBOTO_PATH, 36)
+font_header = ImageFont.truetype(ROBOTO_PATH, 24)  # match left-side title size
 font_date   = ImageFont.truetype(ROBOTO_PATH, 24)  # smaller date title font
 font_event  = ImageFont.truetype(ROBOTO_PATH, 20)  # smaller event name font
 font_weather= ImageFont.truetype(ROBOTO_PATH, 24)
@@ -162,7 +166,8 @@ def render_image(events, weather):
         except Exception:
             date_str = date
         draw.text((margin, y), date_str, font=font_date, fill=(0,0,0))
-        y += font_date.size + 6
+        y += font_date.size + 2  # Add a tiny bit of space after the date title
+        y += 4  # Extra tiny space between title and events
         for start, end, summary in summaries:
             if y + font_event.size + 8 > max_y:
                 break
@@ -197,8 +202,8 @@ def render_image(events, weather):
             break
     # --- Right: Weather ---
     today = datetime.datetime.utcnow().strftime('%d.%m.%Y')
-    draw.text((wx_x, margin), f"Oslo idag {today}", font=font_header, fill=(0,0,0))
-    y_wx = margin + font_header.size + 10
+    draw.text((wx_x, margin), f"Oslo idag {today}", font=font_date, fill=(0,0,0))  # Match left-side title size
+    y_wx = margin + font_date.size + 10
     # Make weather rows and icons larger to fill the image
     row_h = int((H - y_wx - margin) / 8)  # fewer rows, more space
     icon_size = min(row_h-4, 72)           # larger icons
@@ -220,15 +225,72 @@ def render_image(events, weather):
     img.save(buf, 'PNG')
     return buf.getvalue()
 
+def pil_to_waveshare_7in3f_raw(img):
+    # Convert PIL image to 800x480, 7-color (3-bit per pixel) raw format
+    palette = [
+        (0, 0, 0),        # black
+        (255, 255, 255),  # white
+        (0, 255, 0),      # green
+        (0, 0, 255),      # blue
+        (255, 0, 0),      # red
+        (255, 255, 0),    # yellow
+        (255, 165, 0),    # orange
+    ]
+    img = img.convert('RGB').resize((800, 480))
+    raw = bytearray()
+    for y in range(480):
+        for x in range(800):
+            r, g, b = img.getpixel((x, y))
+            idx = min(range(7), key=lambda i: (r-palette[i][0])**2 + (g-palette[i][1])**2 + (b-palette[i][2])**2)
+            raw.append(idx)
+    return bytes(raw)
+
 def epaper(request):
-    # main HTTP entry point
+    fmt = None
+    # Google Cloud Functions: request.args for GET, request.get_json() for POST
+    if hasattr(request, 'args') and request.args:
+        fmt = request.args.get('format', 'png').lower()
+    elif hasattr(request, 'get_json'):
+        try:
+            data = request.get_json(silent=True)
+            if data and 'format' in data:
+                fmt = data['format'].lower()
+        except Exception:
+            pass
+    if not fmt:
+        fmt = 'png'
+    logging.info(f"epaper endpoint called with format={fmt}")
     events = get_events()
     weather = get_weather()
-    png = render_image(events, weather)
-    return (
-        png, 200,
-        {
-          'Content-Type':'image/png',
-          'Cache-Control':'no-cache, max-age=0'
-        }
-    )
+    if fmt == 'jpeg' or fmt == 'jpg':
+        png_bytes = render_image(events, weather)
+        img = Image.open(io.BytesIO(png_bytes)).convert('RGB')
+        buf = io.BytesIO()
+        img.save(buf, 'JPEG', quality=90)
+        return (
+            buf.getvalue(), 200,
+            {
+              'Content-Type':'image/jpeg',
+              'Cache-Control':'no-cache, max-age=0'
+            }
+        )
+    elif fmt == 'raw':
+        png_bytes = render_image(events, weather)
+        img = Image.open(io.BytesIO(png_bytes)).convert('RGB')
+        raw = pil_to_waveshare_7in3f_raw(img)
+        return (
+            raw, 200,
+            {
+              'Content-Type':'application/octet-stream',
+              'Cache-Control':'no-cache, max-age=0'
+            }
+        )
+    else:  # default to PNG
+        png = render_image(events, weather)
+        return (
+            png, 200,
+            {
+              'Content-Type':'image/png',
+              'Cache-Control':'no-cache, max-age=0'
+            }
+        )
