@@ -1,4 +1,4 @@
-import os, io, datetime, json, requests
+import os, io, datetime, json, requests, locale
 from PIL import Image, ImageDraw, ImageFont
 from googleapiclient.discovery import build
 from google.oauth2 import service_account
@@ -20,17 +20,25 @@ font_event  = ImageFont.truetype(ROBOTO_PATH, 20)  # smaller event name font
 font_weather= ImageFont.truetype(ROBOTO_PATH, 24)
 font_small  = ImageFont.truetype(ROBOTO_PATH, 18)
 weather_icons = {
-    'cloudy': Image.open(f'{ICON_DIR}/cloudy.png'),
-    'partly_cloudy': Image.open(f'{ICON_DIR}/cloudy.png'),
-    'sunny': Image.open(f'{ICON_DIR}/cloudy.png'),
-    'clear_night': Image.open(f'{ICON_DIR}/cloudy.png'),
-    'rain': Image.open(f'{ICON_DIR}/cloudy.png'),
-    'showers': Image.open(f'{ICON_DIR}/cloudy.png'),
-    'snow': Image.open(f'{ICON_DIR}/cloudy.png'),
-    'fog': Image.open(f'{ICON_DIR}/cloudy.png'),
-    'sleet': Image.open(f'{ICON_DIR}/cloudy.png'),
-    'thunder': Image.open(f'{ICON_DIR}/cloudy.png'),
+    'cloudy': Image.open(f'{ICON_DIR}/cloudy-day-3.png'),
+    'partly_cloudy': Image.open(f'{ICON_DIR}/partly-cloudy-day.png'),
+    'sunny': Image.open(f'{ICON_DIR}/sunny-day.png'),
+    'clear_night': Image.open(f'{ICON_DIR}/clear-night.png'),
+    'rain': Image.open(f'{ICON_DIR}/rainy-3.png'),
+    'showers': Image.open(f'{ICON_DIR}/rainy-1-day.png'),
+    'snow': Image.open(f'{ICON_DIR}/snowy-3.png'),
+    'fog': Image.open(f'{ICON_DIR}/fog.png'),
+    'sleet': Image.open(f'{ICON_DIR}/sleet.png'),
+    'thunder': Image.open(f'{ICON_DIR}/thunder.png'),
 }
+
+try:
+    locale.setlocale(locale.LC_TIME, 'nb_NO.UTF-8')
+except locale.Error:
+    try:
+        locale.setlocale(locale.LC_TIME, 'no_NO.UTF-8')
+    except locale.Error:
+        pass  # fallback to system default if Norwegian locale not available
 
 def load_credentials():
     client = secretmanager.SecretManagerServiceClient()
@@ -147,7 +155,7 @@ def render_image(events, weather):
     for date, summaries in sorted(events_by_date.items()):
         if y + font_date.size > max_y:
             break
-        # Format date as 'Mandag 25. januar'
+        # Format date as 'Mandag 25. januar' in Norwegian
         try:
             dt = datetime.datetime.strptime(date, "%Y-%m-%d")
             date_str = dt.strftime("%A %d. %B").capitalize()
