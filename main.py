@@ -12,9 +12,13 @@ SECRET_NAME = os.environ['SECRET_NAME']  # e.g. "projects/12345/secrets/calendar
 
 # Load icons & fonts once on cold start
 ICON_DIR = 'icons/png'  # Use relative path for local dev
-# Remove custom fonts for now, use default PIL font
-from PIL import ImageFont
-FONT_DIR = 'fonts'  # Not used, but kept for future
+FONT_DIR = 'fonts'
+ROBOTO_PATH = os.path.join(FONT_DIR, 'Roboto-Regular.ttf')
+font_header = ImageFont.truetype(ROBOTO_PATH, 36)
+font_date   = ImageFont.truetype(ROBOTO_PATH, 32)
+font_event  = ImageFont.truetype(ROBOTO_PATH, 24)
+font_weather= ImageFont.truetype(ROBOTO_PATH, 24)
+font_small  = ImageFont.truetype(ROBOTO_PATH, 18)
 weather_icons = {
     'cloudy': Image.open(f'{ICON_DIR}/cloudy.png'),
     'partly_cloudy': Image.open(f'{ICON_DIR}/cloudy.png'),
@@ -27,9 +31,6 @@ weather_icons = {
     'sleet': Image.open(f'{ICON_DIR}/cloudy.png'),
     'thunder': Image.open(f'{ICON_DIR}/cloudy.png'),
 }
-font_header = ImageFont.load_default()
-font_cal    = ImageFont.load_default()
-font_weather= ImageFont.load_default()
 
 def load_credentials():
     client = secretmanager.SecretManagerServiceClient()
@@ -45,7 +46,8 @@ def get_events():
     creds   = load_credentials()
     service = build('calendar','v3',credentials=creds)
     now     = datetime.datetime.utcnow()
-    then    = now + datetime.timedelta(days=3)
+    # Fetch up to 14 days ahead to ensure enough events to fill the image
+    then    = now + datetime.timedelta(days=14)
     items   = service.events().list(
         calendarId=CALENDAR_ID,
         timeMin=now.isoformat()+'Z',
@@ -53,12 +55,15 @@ def get_events():
         singleEvents=True,
         orderBy='startTime'
     ).execute().get('items',[])
-    # Return as list of (date-str, summary)
-    return [
-      (evt['start'].get('dateTime',evt['start'].get('date'))[:10],
-       evt.get('summary','(No title)'))
-      for evt in items
-    ]
+    # Return as list of (date-str, start, end, summary)
+    events = []
+    for evt in items:
+        start = evt['start'].get('dateTime', evt['start'].get('date'))
+        end = evt['end'].get('dateTime', evt['end'].get('date'))
+        date = start[:10]
+        summary = evt.get('summary','(No title)')
+        events.append((date, start, end, summary))
+    return events
 
 def get_weather():
     # Oslo, Norway coordinates
@@ -121,68 +126,80 @@ def get_weather():
     return details
 
 def render_image(events, weather):
-    # dimensions of your color e-paper
     W,H = 800,480
     img = Image.new('RGB',(W,H),(255,255,255))
     draw = ImageDraw.Draw(img)
 
-    # --- Left: Calendar ---
-    margin = 10
-    cal_w = int(W*0.6)
-    draw.text((margin, margin), "Next 3-day Agenda:", font=font_header, fill=(0,0,0))
-    y = margin + 30
-    block_h = 32
-    max_days = 3
-    max_events_per_day = 4
-    # Group events by date
-    from collections import defaultdict
-    events_by_date = defaultdict(list)
-    for date, summary in events:
-        events_by_date[date].append(summary)
-    # Only show up to max_days
-    for i, (date, summaries) in enumerate(sorted(events_by_date.items())[:max_days]):
-        # Date title
-        draw.rectangle([margin, y, cal_w-margin, y+block_h], fill=(0,128,0))
-        draw.text((margin+5, y+8), date, font=font_header, fill=(255,255,255))
-        y += block_h + 2
-        # Events for this day
-        for j, summary in enumerate(summaries[:max_events_per_day]):
-            draw.rectangle([margin+10, y, cal_w-margin-10, y+block_h], fill=(0,180,0))
-            draw.text((margin+15, y+8), summary, font=font_cal, fill=(255,255,255))
-            y += block_h + 2
-        # If too many events, show ellipsis
-        if len(summaries) > max_events_per_day:
-            draw.text((margin+15, y), "...", font=font_cal, fill=(0,0,0))
-            y += block_h//2
-        # Add extra space between days
-        y += 6
-        if y + block_h > H*0.8:
-            break
-
-    # --- Right: Weather ---
+    margin = 24
+    cal_w = int(W*0.5) - margin
     wx_x = int(W*0.5) + margin
     wx_w = int(W*0.5) - 2*margin
-    draw.text((wx_x, margin), "Oslo Weather Today:", font=font_header, fill=(0,0,0))
-    y_wx = margin + 30
-    row_h = int((H - y_wx - margin) / 12)
-    icon_size = min(row_h-4, 36)
-    for period in weather:
+    y = margin
+    block_h = 32
+    # --- Left: Calendar ---
+    from collections import defaultdict
+    events_by_date = defaultdict(list)
+    for date, start, end, summary in events:
+        events_by_date[date].append((start, end, summary))
+    y = margin
+    max_y = H - margin
+    # Fill up the left side with events from as many days as needed
+    for date, summaries in sorted(events_by_date.items()):
+        if y + font_date.size > max_y:
+            break
+        # Date title in black, large font
+        draw.text((margin, y), date, font=font_date, fill=(0,0,0))
+        y += font_date.size + 6
+        for start, end, summary in summaries:
+            if y + font_event.size + 8 > max_y:
+                break
+            # Draw green box
+            box_x0 = margin+10
+            box_y0 = y
+            box_x1 = margin+cal_w-10
+            box_y1 = y + font_event.size + 8
+            draw.rectangle([box_x0, box_y0, box_x1, box_y1], fill=(120,220,120), outline=(60,180,60), width=2)
+            # Format time
+            try:
+                st = datetime.datetime.fromisoformat(start.replace('Z','+00:00'))
+                et = datetime.datetime.fromisoformat(end.replace('Z','+00:00'))
+                time_str = f"{st.strftime('%H:%M')}-{et.strftime('%H:%M')}"
+            except Exception:
+                time_str = "All day"
+            # Truncate summary if too long
+            max_event_width = box_x1 - (box_x0+90)
+            event_text = summary
+            # Measure and truncate with ellipsis if needed
+            while draw.textlength(event_text, font=font_event) > max_event_width and len(event_text) > 3:
+                event_text = event_text[:-1]
+            if event_text != summary:
+                event_text = event_text[:-3] + '...'
+            # Draw time and summary
+            draw.text((box_x0+6, box_y0+2), time_str, font=font_small, fill=(0,80,0))
+            draw.text((box_x0+90, box_y0+2), event_text, font=font_event, fill=(0,60,0))
+            y += font_event.size + 12
+        y += 10
+        if y + font_date.size > max_y:
+            break
+    # --- Right: Weather ---
+    today = datetime.datetime.utcnow().strftime('%d.%m.%Y')
+    draw.text((wx_x, margin), f"Oslo idag {today}", font=font_header, fill=(0,0,0))
+    y_wx = margin + font_header.size + 10
+    # Make weather rows and icons larger to fill the image
+    row_h = int((H - y_wx - margin) / 10)  # fewer rows, more space
+    icon_size = min(row_h-4, 56)           # larger icons
+    for period in weather[:10]:            # show 10 periods to match new row count
         hour = period['hour']
         temp = period['temp']
         wind = period['wind']
         precip = period['precip']
         icon = period['icon']
         icon_img = weather_icons[icon].resize((icon_size,icon_size), Image.Resampling.LANCZOS)
-        # Draw icon
         img.paste(icon_img, (wx_x, y_wx), icon_img)
-        # Draw time
-        draw.text((wx_x+icon_size+8, y_wx+4), f"{hour:02d}:00", font=font_cal, fill=(0,0,0))
-        # Draw temp
-        draw.text((wx_x+icon_size+70, y_wx+4), f"{int(temp)}°C", font=font_weather, fill=(200,0,0))
-        # Draw precip
-        draw.text((wx_x+icon_size+140, y_wx+4), f"{precip:.1f}mm", font=font_cal, fill=(0,0,0))
-        # Draw wind
-        draw.text((wx_x+icon_size+210, y_wx+4), f"{wind:.1f}m/s", font=font_cal, fill=(0,0,0))
+        draw.text((wx_x+icon_size+8, y_wx+2), f"{hour:02d}:00", font=font_small, fill=(0,0,0))
+        draw.text((wx_x+icon_size+70, y_wx+2), f"{int(temp)}°C", font=font_weather, fill=(200,0,0))
+        draw.text((wx_x+icon_size+140, y_wx+2), f"{precip:.1f}mm", font=font_small, fill=(0,0,0))
+        draw.text((wx_x+icon_size+210, y_wx+2), f"{wind:.1f}m/s", font=font_small, fill=(0,0,0))
         y_wx += row_h
     # return PNG bytes
     buf = io.BytesIO()
