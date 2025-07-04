@@ -228,7 +228,7 @@ def render_image(events, weather):
     return buf.getvalue()
 
 def pil_to_waveshare_7in3f_raw(img):
-    # Convert PIL image to 800x480, 7-color (3-bit per pixel) raw format
+    # Convert PIL image to 800x480, 7-color (3-bit per pixel) raw format, packed as 4 bits per pixel (2 pixels per byte)
     palette = [
         (0, 0, 0),        # black
         (255, 255, 255),  # white
@@ -238,13 +238,22 @@ def pil_to_waveshare_7in3f_raw(img):
         (255, 255, 0),    # yellow
         (255, 165, 0),    # orange
     ]
+    # Remove rotation for display orientation
     img = img.convert('RGB').resize((800, 480))
-    raw = bytearray()
-    for y in range(480):
-        for x in range(800):
+    w, h = img.size
+    # Map each pixel to the closest palette index (0-6)
+    idxs = []
+    for y in range(h):
+        for x in range(w):
             r, g, b = img.getpixel((x, y))
             idx = min(range(7), key=lambda i: (r-palette[i][0])**2 + (g-palette[i][1])**2 + (b-palette[i][2])**2)
-            raw.append(idx)
+            idxs.append(idx)
+    # Pack two 4-bit pixels per byte, MSB first
+    raw = bytearray()
+    for i in range(0, len(idxs), 2):
+        hi = idxs[i] & 0xF
+        lo = idxs[i+1] & 0xF if i+1 < len(idxs) else 0
+        raw.append((hi << 4) | lo)
     return bytes(raw)
 
 def epaper(request):
