@@ -11,16 +11,25 @@ YR_LON      = os.environ['YR_LON']
 SECRET_NAME = os.environ['SECRET_NAME']  # e.g. "projects/12345/secrets/calendar-sa-key"
 
 # Load icons & fonts once on cold start
-ICON_DIR = '/workspace/icons'
-FONT_DIR = '/workspace/fonts'
+ICON_DIR = 'icons/png'  # Use relative path for local dev
+# Remove custom fonts for now, use default PIL font
+from PIL import ImageFont
+FONT_DIR = 'fonts'  # Not used, but kept for future
 weather_icons = {
-  'cloudy': Image.open(f'{ICON_DIR}/day-cloudy.png'),
-  'sunny':  Image.open(f'{ICON_DIR}/day-sunny.png'),
-  'clear_night': Image.open(f'{ICON_DIR}/night-clear.png'),
+    'cloudy': Image.open(f'{ICON_DIR}/cloudy.png'),
+    'partly_cloudy': Image.open(f'{ICON_DIR}/cloudy.png'),
+    'sunny': Image.open(f'{ICON_DIR}/cloudy.png'),
+    'clear_night': Image.open(f'{ICON_DIR}/cloudy.png'),
+    'rain': Image.open(f'{ICON_DIR}/cloudy.png'),
+    'showers': Image.open(f'{ICON_DIR}/cloudy.png'),
+    'snow': Image.open(f'{ICON_DIR}/cloudy.png'),
+    'fog': Image.open(f'{ICON_DIR}/cloudy.png'),
+    'sleet': Image.open(f'{ICON_DIR}/cloudy.png'),
+    'thunder': Image.open(f'{ICON_DIR}/cloudy.png'),
 }
-font_header = ImageFont.truetype(f'{FONT_DIR}/Roboto-Bold.ttf', 22)
-font_cal    = ImageFont.truetype(f'{FONT_DIR}/Roboto-Regular.ttf', 16)
-font_weather= ImageFont.truetype(f'{FONT_DIR}/Roboto-Bold.ttf', 18)
+font_header = ImageFont.load_default()
+font_cal    = ImageFont.load_default()
+font_weather= ImageFont.load_default()
 
 def load_credentials():
     client = secretmanager.SecretManagerServiceClient()
@@ -59,13 +68,31 @@ def get_weather():
     # take first timeseries entry
     ts = data['properties']['timeseries'][0]
     temp = ts['data']['instant']['details']['air_temperature']
-    # pick icon by simple rule:
-    symbol = ts['data']['next_1_hours']['summary']['symbol_code'] \
-             if 'next_1_hours' in ts['data'] else 'cloudy'
-    # map symbol_code to our keys (you can make this more robust)
-    if symbol.startswith('clearsky'): icon='clear_night' if 'night' in symbol else 'sunny'
-    elif 'cloudy' in symbol: icon='cloudy'
-    else: icon='cloudy'
+    # pick icon by symbol_code
+    symbol = ts['data']['next_1_hours']['summary']['symbol_code' if 'next_1_hours' in ts['data'] else 'cloudy']
+    # Map yr.no symbol_code to our icon keys
+    if symbol.startswith('clearsky'):
+        icon = 'clear_night' if 'night' in symbol else 'sunny'
+    elif symbol.startswith('cloudy'):
+        icon = 'cloudy'
+    elif symbol.startswith('partlycloudy'):
+        icon = 'partly_cloudy'
+    elif symbol.startswith('fair'):
+        icon = 'sunny'
+    elif symbol.startswith('rain'):
+        icon = 'rain'
+    elif symbol.startswith('showers'):
+        icon = 'showers'
+    elif symbol.startswith('snow'):
+        icon = 'snow'
+    elif symbol.startswith('fog'):
+        icon = 'fog'
+    elif symbol.startswith('sleet'):
+        icon = 'sleet'
+    elif symbol.startswith('thunder'):
+        icon = 'thunder'
+    else:
+        icon = 'cloudy'
     return f"{int(temp)}°C", icon
 
 def render_image(events, weather):

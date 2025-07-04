@@ -2,4 +2,22 @@
   "python.pythonPath": "${workspaceFolder}/.venv/bin/python",
   "python.formatting.provider": "black",
   "editor.formatOnSave": true
+
+"github.copilot.fileTypes": {
+  "javascript": true,
+  "python": true,
+  "json":      true
+},
+"files.exclude": {
+    "**/.git": true,
+    "**/.svn": true,
+    // ensure .vscode itself is visible to Copilot
+    "**/.vscode": false
+  },
+  // enable Copilot for JSON files
+  "github.copilot.fileTypes": {
+    "json": true,
+    "javascript": true,
+    "python": true
+  }
 }

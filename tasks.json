@@ -1,0 +1,17 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "type": "shell",
+      "label": "Deploy epaper to Google Cloud Functions",
+      "command": "gcloud functions deploy epaper --runtime=python310 --trigger-http --allow-unauthenticated --entry-point=epaper --region=europe-north1 --set-env-vars=CALENDAR_ID=your_cal_id@group.calendar.google.com,YR_LAT=59.91,YR_LON=10.75,SECRET_NAME=projects/12345/secrets/calendar-sa-key"
+    },
+    {
+      "label": "Run epaper locally with env vars",
+      "type": "shell",
+      "command": "export GOOGLE_APPLICATION_CREDENTIALS=\"/Users/ramon.arellano/Documents/Github/google-service-account/kitche-epaper-renderer-83308b27697a.json\" && export CALENDAR_ID=48otkcqvhjlqlogfkgic7labis@group.calendar.google.com && export YR_LAT=59.91 && export YR_LON=10.75 && export SECRET_NAME=projects/14548432634/secrets/kitchen-epaper-renderer-google-calendar-secret && functions-framework --target=epaper --port=8080",
+      "isBackground": true,
+      "problemMatcher": []
+    }
+  ]
+}
