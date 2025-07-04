@@ -15,8 +15,8 @@ ICON_DIR = 'icons/png'  # Use relative path for local dev
 FONT_DIR = 'fonts'
 ROBOTO_PATH = os.path.join(FONT_DIR, 'Roboto-Regular.ttf')
 font_header = ImageFont.truetype(ROBOTO_PATH, 36)
-font_date   = ImageFont.truetype(ROBOTO_PATH, 32)
-font_event  = ImageFont.truetype(ROBOTO_PATH, 24)
+font_date   = ImageFont.truetype(ROBOTO_PATH, 24)  # smaller date title font
+font_event  = ImageFont.truetype(ROBOTO_PATH, 20)  # smaller event name font
 font_weather= ImageFont.truetype(ROBOTO_PATH, 24)
 font_small  = ImageFont.truetype(ROBOTO_PATH, 18)
 weather_icons = {
@@ -147,8 +147,13 @@ def render_image(events, weather):
     for date, summaries in sorted(events_by_date.items()):
         if y + font_date.size > max_y:
             break
-        # Date title in black, large font
-        draw.text((margin, y), date, font=font_date, fill=(0,0,0))
+        # Format date as 'Mandag 25. januar'
+        try:
+            dt = datetime.datetime.strptime(date, "%Y-%m-%d")
+            date_str = dt.strftime("%A %d. %B").capitalize()
+        except Exception:
+            date_str = date
+        draw.text((margin, y), date_str, font=font_date, fill=(0,0,0))
         y += font_date.size + 6
         for start, end, summary in summaries:
             if y + font_event.size + 8 > max_y:
@@ -167,16 +172,17 @@ def render_image(events, weather):
             except Exception:
                 time_str = "All day"
             # Truncate summary if too long
-            max_event_width = box_x1 - (box_x0+90)
+            time_x = box_x0+6
+            event_x = box_x0+120  # start event title further right
+            max_event_width = box_x1 - event_x - 8
             event_text = summary
-            # Measure and truncate with ellipsis if needed
             while draw.textlength(event_text, font=font_event) > max_event_width and len(event_text) > 3:
                 event_text = event_text[:-1]
             if event_text != summary:
                 event_text = event_text[:-3] + '...'
             # Draw time and summary
-            draw.text((box_x0+6, box_y0+2), time_str, font=font_small, fill=(0,80,0))
-            draw.text((box_x0+90, box_y0+2), event_text, font=font_event, fill=(0,60,0))
+            draw.text((time_x, box_y0+2), time_str, font=font_small, fill=(0,80,0))
+            draw.text((event_x, box_y0+2), event_text, font=font_event, fill=(0,60,0))
             y += font_event.size + 12
         y += 10
         if y + font_date.size > max_y:
@@ -186,9 +192,9 @@ def render_image(events, weather):
     draw.text((wx_x, margin), f"Oslo idag {today}", font=font_header, fill=(0,0,0))
     y_wx = margin + font_header.size + 10
     # Make weather rows and icons larger to fill the image
-    row_h = int((H - y_wx - margin) / 10)  # fewer rows, more space
-    icon_size = min(row_h-4, 56)           # larger icons
-    for period in weather[:10]:            # show 10 periods to match new row count
+    row_h = int((H - y_wx - margin) / 8)  # fewer rows, more space
+    icon_size = min(row_h-4, 72)           # larger icons
+    for period in weather[:8]:            # show 8 periods to match new row count
         hour = period['hour']
         temp = period['temp']
         wind = period['wind']
