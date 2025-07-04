@@ -14,5 +14,5 @@ node_modules/
 coverage/
 dist/
 build/
-# icons/*.png
-# fonts/*.ttf
+icons/*.png
+fonts/*.ttf
