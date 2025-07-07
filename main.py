@@ -4,6 +4,7 @@ from googleapiclient.discovery import build
 from google.oauth2 import service_account
 from google.cloud import secretmanager
 import logging
+import pytz
 
 # env vars (set these when deploying)
 CALENDAR_ID = os.environ['CALENDAR_ID']
@@ -131,10 +132,13 @@ def render_image(events, weather):
     for date, summaries in sorted(events_by_date.items()):
         if y + font_date.size > max_y:
             break
-        # Format date as 'Mandag 25. januar' in Norwegian
+        # Format date as 'Mandag 5. januar' in Norwegian (no leading zero)
         try:
             dt = datetime.datetime.strptime(date, "%Y-%m-%d")
-            date_str = dt.strftime("%A %d. %B").capitalize()
+            day = dt.day
+            month_str = dt.strftime("%B")
+            date_str = dt.strftime("%A") + f" {day}. {month_str}"
+            date_str = date_str.capitalize()
         except Exception:
             date_str = date
         draw.text((margin, y), date_str, font=font_date, fill=(0,0,0))
@@ -176,15 +180,19 @@ def render_image(events, weather):
     now = datetime.datetime.utcnow()
     today_date = now.date()
     tomorrow_date = (now + datetime.timedelta(days=1)).date()
-    # Format dates as 'DD. month' in Norwegian
+    # Format dates as '5. juli' in Norwegian (no leading zero)
     try:
         today_dt = now
-        today_str = today_dt.strftime('%d. %B').capitalize()
+        today_day = today_dt.day
+        today_month = today_dt.strftime('%B')
+        today_str = f"{today_day}. {today_month}".capitalize()
         tomorrow_dt = now + datetime.timedelta(days=1)
-        tomorrow_str = tomorrow_dt.strftime('%d. %B').capitalize()
+        tomorrow_day = tomorrow_dt.day
+        tomorrow_month = tomorrow_dt.strftime('%B')
+        tomorrow_str = f"{tomorrow_day}. {tomorrow_month}".capitalize()
     except Exception:
-        today_str = now.strftime('%d.%m.%Y')
-        tomorrow_str = (now + datetime.timedelta(days=1)).strftime('%d.%m.%Y')
+        today_str = now.strftime('%-d.%m.%Y')
+        tomorrow_str = (now + datetime.timedelta(days=1)).strftime('%-d.%m.%Y')
     draw.text((wx_x, margin), f"Oslo idag {today_str}", font=font_date, fill=(0,0,0))  # Match left-side title size
     y_wx = margin + font_date.size + 10
     # Make weather rows and icons larger to fill the image
@@ -236,8 +244,10 @@ def render_image(events, weather):
             draw.text((wx_x+icon_size+230, text_y), f"{wind:.1f}m/s", font=font_weather, fill=(0,0,0))
             y_wx += row_h
     # --- After drawing everything, remap image to 7-color palette for preview ---
-    # Add last updated text in lower right corner
-    last_updated = datetime.datetime.now().strftime('Last updated %Y-%m-%d %H:%M')
+    # Add last updated text in lower right corner (Central European Time)
+    cet = pytz.timezone('Europe/Oslo')
+    last_updated_dt = datetime.datetime.now(tz=pytz.utc).astimezone(cet)
+    last_updated = last_updated_dt.strftime('Last updated %Y-%m-%d %H:%M')
     bbox = font_small.getbbox(last_updated)
     text_w, text_h = bbox[2] - bbox[0], bbox[3] - bbox[1]
     draw.text((W - text_w - 10, H - text_h - 6), last_updated, font=font_small, fill=(0,0,0))
