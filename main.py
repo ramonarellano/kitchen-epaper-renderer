@@ -105,7 +105,9 @@ def get_weather():
 
 def render_image(events, weather):
     W,H = 800,480
-    img = Image.new('RGB',(W,H),(255,255,0))  # Set background to yellow
+    # Use a much lighter yellow for the background
+    LIGHT_YELLOW = (255, 255, 180)
+    img = Image.new('RGB',(W,H), LIGHT_YELLOW)  # Set background to lighter yellow
     draw = ImageDraw.Draw(img)
 
     margin = 24
@@ -160,8 +162,8 @@ def render_image(events, weather):
             if event_text != summary:
                 event_text = event_text[:-3] + '...'
             # Draw time and summary
-            draw.text((time_x, box_y0+2), time_str, font=font_small, fill=(255,255,255))
-            draw.text((event_x, box_y0+2), event_text, font=font_event, fill=(255,255,255))
+            draw.text((time_x, box_y0+2), time_str, font=font_small, fill=(0,0,0))  # black text
+            draw.text((event_x, box_y0+2), event_text, font=font_event, fill=(0,0,0))  # black text
             y += font_event.size + 12
         y += 10
         if y + font_date.size > max_y:
@@ -195,29 +197,29 @@ def render_image(events, weather):
     bbox = font_small.getbbox(last_updated)
     text_w, text_h = bbox[2] - bbox[0], bbox[3] - bbox[1]
     draw.text((W - text_w - 10, H - text_h - 6), last_updated, font=font_small, fill=(0,0,0))
-    # Remove the yellow-to-orange replacement step
-    img = img.convert('RGB')
-    w, h = img.size
-    pixels = img.load()
-    # Now quantize to 7-color palette, with background as yellow
-    palette = [
+
+    # Create a custom 7-color palette image for quantization
+    palette_colors = [
         (0, 0, 0),        # black
-        (255, 255, 0),    # yellow (background)
+        (255, 255, 180),  # lighter yellow (background)
         (0, 255, 0),      # green
         (0, 0, 255),      # blue
         (255, 0, 0),      # red
         (255, 255, 255),  # white
         (255, 165, 0),    # orange
     ]
-    quant = Image.new('RGB', (w, h), (255,255,0))
-    quant_pixels = quant.load()
-    for y in range(h):
-        for x in range(w):
-            r, g, b = pixels[x, y]
-            idx = min(range(7), key=lambda i: (r-palette[i][0])**2 + (g-palette[i][1])**2 + (b-palette[i][2])**2)
-            quant_pixels[x, y] = palette[idx]
+    pal_img = Image.new('P', (1, 1))
+    pal_flat = []
+    for rgb in palette_colors:
+        pal_flat.extend(rgb)
+    # Pad to 256 colors
+    pal_flat += [0] * (256*3 - len(pal_flat))
+    pal_img.putpalette(pal_flat)
+
+    # Dither and quantize
+    dithered = img.quantize(palette=pal_img, dither=Image.FLOYDSTEINBERG)
     buf = io.BytesIO()
-    quant.save(buf, 'PNG')
+    dithered.save(buf, 'PNG')
     return buf.getvalue()
 
 def pil_to_waveshare_7in3f_raw(img):
