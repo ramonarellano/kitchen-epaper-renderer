@@ -72,29 +72,33 @@ def get_weather():
     url = f'https://api.met.no/weatherapi/locationforecast/2.0/compact?lat={lat}&lon={lon}'
     headers = {'User-Agent':'kitchen-epaper/1.0'}
     data = requests.get(url, headers=headers).json()
-    # Get 12 periods: every 2 hours for today
+    # Get periods: every 2 hours for today and tomorrow
     periods = list(range(0, 24, 2))  # 0, 2, ..., 22
     now = datetime.datetime.utcnow()
+    today = now.date()
+    tomorrow = (now + datetime.timedelta(days=1)).date()
     times = []
     for ts in data['properties']['timeseries']:
         t = datetime.datetime.fromisoformat(ts['time'].replace('Z','+00:00'))
-        if t.date() == now.date() and t.hour in periods:
+        if (t.date() == today or t.date() == tomorrow) and t.hour in periods:
             times.append(ts)
-            if len(times) == 12:
-                break
+            # No break here, we want both days
     details = []
     for ts in times:
         t = datetime.datetime.fromisoformat(ts['time'].replace('Z','+00:00'))
+        day = t.date()
         hour = t.hour
         temp = ts['data']['instant']['details']['air_temperature']
         wind = ts['data']['instant']['details'].get('wind_speed', 0)
         precip = 0
         if 'next_1_hours' in ts['data']:
             precip = ts['data']['next_1_hours']['details'].get('precipitation_amount', 0)
-            print(ts)
             symbol = ts['data']['next_1_hours']['summary']['symbol_code']
+        else:
+            symbol = None
         icon = symbol  # Use symbol_code directly as icon filename
         details.append({
+            'date': day,
             'hour': hour,
             'temp': temp,
             'wind': wind,
@@ -169,13 +173,31 @@ def render_image(events, weather):
         if y + font_date.size > max_y:
             break
     # --- Right: Weather ---
-    today = datetime.datetime.utcnow().strftime('%d.%m.%Y')
-    draw.text((wx_x, margin), f"Oslo idag {today}", font=font_date, fill=(0,0,0))  # Match left-side title size
+    now = datetime.datetime.utcnow()
+    today_date = now.date()
+    tomorrow_date = (now + datetime.timedelta(days=1)).date()
+    # Format dates as 'DD. month' in Norwegian
+    try:
+        today_dt = now
+        today_str = today_dt.strftime('%d. %B').capitalize()
+        tomorrow_dt = now + datetime.timedelta(days=1)
+        tomorrow_str = tomorrow_dt.strftime('%d. %B').capitalize()
+    except Exception:
+        today_str = now.strftime('%d.%m.%Y')
+        tomorrow_str = (now + datetime.timedelta(days=1)).strftime('%d.%m.%Y')
+    draw.text((wx_x, margin), f"Oslo idag {today_str}", font=font_date, fill=(0,0,0))  # Match left-side title size
     y_wx = margin + font_date.size + 10
     # Make weather rows and icons larger to fill the image
     row_h = int((H - y_wx - margin) / 8) + 8  # increase row spacing
     icon_size = min(row_h-2, 96)              # larger icons, up to 96px
-    for period in weather[:8]:                # show 8 periods to match new row count
+    # Split weather into today and tomorrow using the new 'date' field
+    now = datetime.datetime.utcnow()
+    today_date = now.date()
+    tomorrow_date = (now + datetime.timedelta(days=1)).date()
+    today_periods = [p for p in weather if p.get('date') == today_date]
+    tomorrow_periods = [p for p in weather if p.get('date') == tomorrow_date]
+    # Draw today's weather
+    for period in today_periods[:8]:                # show up to 8 periods
         hour = period['hour']
         temp = period['temp']
         wind = period['wind']
@@ -191,6 +213,28 @@ def render_image(events, weather):
         draw.text((wx_x+icon_size+140, text_y), f"{precip:.1f}mm", font=font_weather, fill=(0,0,0))
         draw.text((wx_x+icon_size+230, text_y), f"{wind:.1f}m/s", font=font_weather, fill=(0,0,0))
         y_wx += row_h
+    # Draw tomorrow's weather if there is space
+    if tomorrow_periods and y_wx + font_date.size + 10 < H - margin:
+        tomorrow_title_y = y_wx + 10
+        draw.text((wx_x, tomorrow_title_y), f"Oslo imorgen {tomorrow_str}", font=font_date, fill=(0,0,0))
+        y_wx = tomorrow_title_y + font_date.size + 10
+        for period in tomorrow_periods[:8]:
+            if y_wx + icon_size > H - margin:
+                break
+            hour = period['hour']
+            temp = period['temp']
+            wind = period['wind']
+            precip = period['precip']
+            icon = period['icon']
+            icon_path = os.path.join('icons', f"{icon}.png")
+            icon_img = Image.open(icon_path).resize((icon_size,icon_size), Image.Resampling.LANCZOS)
+            img.paste(icon_img, (wx_x, y_wx), icon_img)
+            text_y = y_wx + (icon_size - font_weather.size) // 2
+            draw.text((wx_x+icon_size+8, text_y), f"{hour:02d}:00", font=font_weather, fill=(0,0,0))
+            draw.text((wx_x+icon_size+70, text_y), f"{int(temp)}°C", font=font_weather, fill=(200,0,0))
+            draw.text((wx_x+icon_size+140, text_y), f"{precip:.1f}mm", font=font_weather, fill=(0,0,0))
+            draw.text((wx_x+icon_size+230, text_y), f"{wind:.1f}m/s", font=font_weather, fill=(0,0,0))
+            y_wx += row_h
     # --- After drawing everything, remap image to 7-color palette for preview ---
     # Add last updated text in lower right corner
     last_updated = datetime.datetime.now().strftime('Last updated %Y-%m-%d %H:%M')
