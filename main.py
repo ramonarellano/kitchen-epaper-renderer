@@ -180,20 +180,23 @@ def render_image(events, weather):
     now = datetime.datetime.utcnow()
     today_date = now.date()
     tomorrow_date = (now + datetime.timedelta(days=1)).date()
-    # Format dates as '5. juli' in Norwegian (no leading zero)
+    # Format dates as 'mandag 7. juli' in Norwegian (no leading zero, lowercase weekday, dash separator)
     try:
         today_dt = now
         today_day = today_dt.day
         today_month = today_dt.strftime('%B')
-        today_str = f"{today_day}. {today_month}".capitalize()
+        today_weekday = today_dt.strftime('%A').lower()
+        today_str = f"{today_weekday} {today_day}. {today_month}"
+        today_str = today_str  # already lowercase
         tomorrow_dt = now + datetime.timedelta(days=1)
         tomorrow_day = tomorrow_dt.day
         tomorrow_month = tomorrow_dt.strftime('%B')
-        tomorrow_str = f"{tomorrow_day}. {tomorrow_month}".capitalize()
+        tomorrow_weekday = tomorrow_dt.strftime('%A').lower()
+        tomorrow_str = f"{tomorrow_weekday} {tomorrow_day}. {tomorrow_month}"
     except Exception:
-        today_str = now.strftime('%-d.%m.%Y')
-        tomorrow_str = (now + datetime.timedelta(days=1)).strftime('%-d.%m.%Y')
-    draw.text((wx_x, margin), f"Oslo idag {today_str}", font=font_date, fill=(0,0,0))  # Match left-side title size
+        today_str = now.strftime('%A %-d.%m.%Y').lower()
+        tomorrow_str = (now + datetime.timedelta(days=1)).strftime('%A %-d.%m.%Y').lower()
+    draw.text((wx_x, margin), f"Oslo idag - {today_str}", font=font_date, fill=(0,0,0))  # Match left-side title size
     y_wx = margin + font_date.size + 10
     # Make weather rows and icons larger to fill the image
     row_h = int((H - y_wx - margin) / 8) + 8  # increase row spacing
@@ -203,7 +206,8 @@ def render_image(events, weather):
     today_date = now.date()
     tomorrow_date = (now + datetime.timedelta(days=1)).date()
     today_periods = [p for p in weather if p.get('date') == today_date]
-    tomorrow_periods = [p for p in weather if p.get('date') == tomorrow_date]
+    # For tomorrow, only include periods from 06:00 and later
+    tomorrow_periods = [p for p in weather if p.get('date') == tomorrow_date and p.get('hour', 0) >= 6]
     # Draw today's weather
     for period in today_periods[:8]:                # show up to 8 periods
         hour = period['hour']
@@ -224,7 +228,7 @@ def render_image(events, weather):
     # Draw tomorrow's weather if there is space
     if tomorrow_periods and y_wx + font_date.size + 10 < H - margin:
         tomorrow_title_y = y_wx + 10
-        draw.text((wx_x, tomorrow_title_y), f"Oslo imorgen {tomorrow_str}", font=font_date, fill=(0,0,0))
+        draw.text((wx_x, tomorrow_title_y), f"Oslo imorgen - {tomorrow_str}", font=font_date, fill=(0,0,0))
         y_wx = tomorrow_title_y + font_date.size + 10
         for period in tomorrow_periods[:8]:
             if y_wx + icon_size > H - margin:
