@@ -15,7 +15,7 @@ SECRET_NAME = os.environ['SECRET_NAME']  # e.g. "projects/12345/secrets/calendar
 logging.basicConfig(level=logging.INFO)
 
 # Load icons & fonts once on cold start
-ICON_DIR = 'icons/png'  # Use relative path for local dev
+ICON_DIR = 'icons'  # Use relative path for local dev
 FONT_DIR = 'fonts'
 ROBOTO_PATH = os.path.join(FONT_DIR, 'Roboto-Regular.ttf')
 font_header = ImageFont.truetype(ROBOTO_PATH, 24)  # match left-side title size
@@ -23,18 +23,6 @@ font_date   = ImageFont.truetype(ROBOTO_PATH, 24)  # smaller date title font
 font_event  = ImageFont.truetype(ROBOTO_PATH, 20)  # smaller event name font
 font_weather= ImageFont.truetype(ROBOTO_PATH, 20)
 font_small  = ImageFont.truetype(ROBOTO_PATH, 18)
-weather_icons = {
-    'cloudy': Image.open(f'{ICON_DIR}/cloudy-day-3.png'),
-    'partly_cloudy': Image.open(f'{ICON_DIR}/partly-cloudy-day.png'),
-    'sunny': Image.open(f'{ICON_DIR}/sunny-day.png'),
-    'clear_night': Image.open(f'{ICON_DIR}/clear-night.png'),
-    'rain': Image.open(f'{ICON_DIR}/rainy-3.png'),
-    'showers': Image.open(f'{ICON_DIR}/rainy-1-day.png'),
-    'snow': Image.open(f'{ICON_DIR}/snowy-3.png'),
-    'fog': Image.open(f'{ICON_DIR}/fog.png'),
-    'sleet': Image.open(f'{ICON_DIR}/sleet.png'),
-    'thunder': Image.open(f'{ICON_DIR}/thunder.png'),
-}
 
 try:
     locale.setlocale(locale.LC_TIME, 'nb_NO.UTF-8')
@@ -103,31 +91,9 @@ def get_weather():
         precip = 0
         if 'next_1_hours' in ts['data']:
             precip = ts['data']['next_1_hours']['details'].get('precipitation_amount', 0)
+            print(ts)
             symbol = ts['data']['next_1_hours']['summary']['symbol_code']
-        else:
-            symbol = 'cloudy'
-        if symbol.startswith('clearsky'):
-            icon = 'clear_night' if 'night' in symbol else 'sunny'
-        elif symbol.startswith('cloudy'):
-            icon = 'cloudy'
-        elif symbol.startswith('partlycloudy'):
-            icon = 'partly_cloudy'
-        elif symbol.startswith('fair'):
-            icon = 'sunny'
-        elif symbol.startswith('rain'):
-            icon = 'rain'
-        elif symbol.startswith('showers'):
-            icon = 'showers'
-        elif symbol.startswith('snow'):
-            icon = 'snow'
-        elif symbol.startswith('fog'):
-            icon = 'fog'
-        elif symbol.startswith('sleet'):
-            icon = 'sleet'
-        elif symbol.startswith('thunder'):
-            icon = 'thunder'
-        else:
-            icon = 'cloudy'
+        icon = symbol  # Use symbol_code directly as icon filename
         details.append({
             'hour': hour,
             'temp': temp,
@@ -139,7 +105,7 @@ def get_weather():
 
 def render_image(events, weather):
     W,H = 800,480
-    img = Image.new('RGB',(W,H),(255,255,255))
+    img = Image.new('RGB',(W,H),(255,255,0))  # Set background to yellow
     draw = ImageDraw.Draw(img)
 
     margin = 24
@@ -194,8 +160,8 @@ def render_image(events, weather):
             if event_text != summary:
                 event_text = event_text[:-3] + '...'
             # Draw time and summary
-            draw.text((time_x, box_y0+2), time_str, font=font_small, fill=(0,80,0))
-            draw.text((event_x, box_y0+2), event_text, font=font_event, fill=(0,60,0))
+            draw.text((time_x, box_y0+2), time_str, font=font_small, fill=(255,255,255))
+            draw.text((event_x, box_y0+2), event_text, font=font_event, fill=(255,255,255))
             y += font_event.size + 12
         y += 10
         if y + font_date.size > max_y:
@@ -213,7 +179,8 @@ def render_image(events, weather):
         wind = period['wind']
         precip = period['precip']
         icon = period['icon']
-        icon_img = weather_icons[icon].resize((icon_size,icon_size), Image.Resampling.LANCZOS)
+        icon_path = os.path.join('icons', f"{icon}.png")  # Always use root icons folder
+        icon_img = Image.open(icon_path).resize((icon_size,icon_size), Image.Resampling.LANCZOS)
         img.paste(icon_img, (wx_x, y_wx), icon_img)
         # Vertically center the text relative to the icon
         text_y = y_wx + (icon_size - font_weather.size) // 2
@@ -222,9 +189,35 @@ def render_image(events, weather):
         draw.text((wx_x+icon_size+140, text_y), f"{precip:.1f}mm", font=font_weather, fill=(0,0,0))
         draw.text((wx_x+icon_size+230, text_y), f"{wind:.1f}m/s", font=font_weather, fill=(0,0,0))
         y_wx += row_h
-    # return PNG bytes
+    # --- After drawing everything, remap image to 7-color palette for preview ---
+    # Add last updated text in lower right corner
+    last_updated = datetime.datetime.now().strftime('Last updated %Y-%m-%d %H:%M')
+    bbox = font_small.getbbox(last_updated)
+    text_w, text_h = bbox[2] - bbox[0], bbox[3] - bbox[1]
+    draw.text((W - text_w - 10, H - text_h - 6), last_updated, font=font_small, fill=(0,0,0))
+    # Remove the yellow-to-orange replacement step
+    img = img.convert('RGB')
+    w, h = img.size
+    pixels = img.load()
+    # Now quantize to 7-color palette, with background as yellow
+    palette = [
+        (0, 0, 0),        # black
+        (255, 255, 0),    # yellow (background)
+        (0, 255, 0),      # green
+        (0, 0, 255),      # blue
+        (255, 0, 0),      # red
+        (255, 255, 255),  # white
+        (255, 165, 0),    # orange
+    ]
+    quant = Image.new('RGB', (w, h), (255,255,0))
+    quant_pixels = quant.load()
+    for y in range(h):
+        for x in range(w):
+            r, g, b = pixels[x, y]
+            idx = min(range(7), key=lambda i: (r-palette[i][0])**2 + (g-palette[i][1])**2 + (b-palette[i][2])**2)
+            quant_pixels[x, y] = palette[idx]
     buf = io.BytesIO()
-    img.save(buf, 'PNG')
+    quant.save(buf, 'PNG')
     return buf.getvalue()
 
 def pil_to_waveshare_7in3f_raw(img):
