@@ -16,3 +16,4 @@ dist/
 build/
 # icons/*.png
 # fonts/*.ttf
+COPILOT_INSTRUCTIONS.md
