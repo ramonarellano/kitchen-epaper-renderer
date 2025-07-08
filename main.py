@@ -203,9 +203,9 @@ def render_image(events, weather):
         tomorrow_str = (now + datetime.timedelta(days=1)).strftime('%A %-d.%m.%Y').lower()
     draw.text((wx_x, margin), f"Oslo idag - {today_str}", font=font_date, fill=(0,0,0))  # Match left-side title size
     y_wx = margin + font_date.size + 10
-    # Make weather rows and icons larger to fill the image
-    row_h = int((H - y_wx - margin) / 8) + 8  # increase row spacing
-    icon_size = min(row_h-2, 96)              # larger icons, up to 96px
+    # Make weather rows and icons smaller to fit all periods (08:00-22:00) on screen
+    row_h = int((H - y_wx - margin) / 8)  # 8 periods: 08,10,...,22
+    icon_size = min(row_h-8, 64)          # slightly smaller icons, max 64px
     # Split weather into today and tomorrow using the new 'date' field
     now = datetime.datetime.utcnow()
     today_date = now.date()
