@@ -73,17 +73,22 @@ def get_weather():
     url = f'https://api.met.no/weatherapi/locationforecast/2.0/compact?lat={lat}&lon={lon}'
     headers = {'User-Agent':'kitchen-epaper/1.0'}
     data = requests.get(url, headers=headers).json()
-    # Get periods: every 2 hours for today and tomorrow
-    periods = list(range(0, 24, 2))  # 0, 2, ..., 22
+    # Get periods: every 2 hours for today and tomorrow, starting at 08:00
+    periods = list(range(8, 24, 2))  # 8, 10, ..., 22
     now = datetime.datetime.utcnow()
     today = now.date()
     tomorrow = (now + datetime.timedelta(days=1)).date()
+    current_hour = now.hour
     times = []
     for ts in data['properties']['timeseries']:
         t = datetime.datetime.fromisoformat(ts['time'].replace('Z','+00:00'))
-        if (t.date() == today or t.date() == tomorrow) and t.hour in periods:
+        # For today, only include periods >= current hour (rounded up to next even hour)
+        if t.date() == today:
+            # Find the next period >= now (e.g., if now is 11:15, show 12:00 and later)
+            if t.hour in periods and t.hour >= ((current_hour + 1) // 2) * 2:
+                times.append(ts)
+        elif t.date() == tomorrow and t.hour in periods:
             times.append(ts)
-            # No break here, we want both days
     details = []
     for ts in times:
         t = datetime.datetime.fromisoformat(ts['time'].replace('Z','+00:00'))
@@ -291,7 +296,8 @@ def pil_to_waveshare_7in3f_raw(img):
         (255, 255, 0),    # yellow
         (255, 165, 0),    # orange
     ]
-    # Remove rotation for display orientation
+    # Rotate image 180 degrees to correct upside-down display
+    img = img.rotate(180)
     img = img.convert('RGB').resize((800, 480))
     w, h = img.size
     # Map each pixel to the closest palette index (0-6)
