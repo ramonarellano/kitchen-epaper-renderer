@@ -141,13 +141,26 @@ def _truncate(text, font, max_w):
         text = text[:-1]
     return text.rstrip() + '…'
 
-def _event_time(start, end):
-    # All-day events have date-only start/end ('YYYY-MM-DD')
-    if len(start) == 10:
-        return "Hele dagen"
+MONTHS_SHORT = ['jan', 'feb', 'mar', 'apr', 'mai', 'jun', 'jul', 'aug', 'sep', 'okt', 'nov', 'des']
+
+def _event_time(start, end, shown_on):
+    """Time label for an event listed under the date shown_on.
+
+    Multi-day events (and events that started before shown_on) show when they end, e.g. 'til 16. okt'.
+    """
     try:
+        if len(start) == 10:
+            # All-day events have date-only start/end ('YYYY-MM-DD'); end is exclusive
+            last_day = datetime.date.fromisoformat(end) - datetime.timedelta(days=1)
+            if last_day > shown_on:
+                return f"til {last_day.day}. {MONTHS_SHORT[last_day.month - 1]}"
+            return "Hele dagen"
         st = datetime.datetime.fromisoformat(start.replace('Z','+00:00')).astimezone(OSLO_TZ)
         et = datetime.datetime.fromisoformat(end.replace('Z','+00:00')).astimezone(OSLO_TZ)
+        if et.date() > shown_on:
+            return f"til {et.day}. {MONTHS_SHORT[et.month - 1]}"
+        if st.date() < shown_on:
+            return f"til {et.strftime('%H:%M')}"
         return f"{st.strftime('%H:%M')}–{et.strftime('%H:%M')}"
     except Exception:
         return "Hele dagen"
@@ -163,10 +176,12 @@ def render_image(events, weather, now=None):
     from collections import defaultdict
     events_by_date = defaultdict(list)
     for date, start, end, summary in events:
-        events_by_date[date].append((start, end, summary))
+        # Ongoing events that started before today are listed under today
+        events_by_date[max(date, today.isoformat())].append((start, end, summary))
     x0 = MARGIN
     col_right = DIVIDER_X - 16
-    times = [_event_time(st, et) for items in events_by_date.values() for st, et, _ in items]
+    times = [_event_time(st, et, datetime.date.fromisoformat(date))
+             for date, items in events_by_date.items() for st, et, _ in items]
     title_x = x0 + 8 + max([font_time.width(t) for t in times] or [0]) + 12
     max_y = H - MARGIN
     y = MARGIN - 4
@@ -188,7 +203,7 @@ def render_image(events, weather, now=None):
             if y + 27 > max_y:
                 break
             y += 27
-            sk.text((x0 + 8, y), _event_time(start, end), font_time)
+            sk.text((x0 + 8, y), _event_time(start, end, d), font_time)
             sk.text((title_x, y), _truncate(summary, font_event, col_right - title_x), font_event)
             sk.mark((x0, y - 20, col_right, y + 6))  # keep doodles out of the row
         y += 12
@@ -251,21 +266,13 @@ def pil_to_waveshare_7in3f_raw(img):
     # Rotate image 180 degrees to correct upside-down display
     img = img.rotate(180)
     img = img.convert('RGB').resize((800, 480))
-    w, h = img.size
-    # Map each pixel to the closest palette index (0-6)
-    idxs = []
-    for y in range(h):
-        for x in range(w):
-            r, g, b = img.getpixel((x, y))
-            idx = min(range(7), key=lambda i: (r-palette[i][0])**2 + (g-palette[i][1])**2 + (b-palette[i][2])**2)
-            idxs.append(idx)
+    # Map each pixel to the closest palette index (0-6) with Pillow's C quantizer.
+    # Unused palette slots repeat black so they can never win over index 0.
+    pal_img = Image.new('P', (1, 1))
+    pal_img.putpalette([c for rgb in palette for c in rgb] + list(palette[0]) * (256 - len(palette)))
+    idxs = img.quantize(palette=pal_img, dither=Image.Dither.NONE).tobytes()
     # Pack two 4-bit pixels per byte, MSB first
-    raw = bytearray()
-    for i in range(0, len(idxs), 2):
-        hi = idxs[i] & 0xF
-        lo = idxs[i+1] & 0xF if i+1 < len(idxs) else 0
-        raw.append((hi << 4) | lo)
-    return bytes(raw)
+    return bytes((idxs[i] << 4) | idxs[i + 1] for i in range(0, len(idxs), 2))
 
 def epaper(request):
     fmt = None
