@@ -140,6 +140,42 @@ class Sketch:
         if outline:
             self.stroke(pts, width=width, amp=amp, closed=True)
 
+    def dashed(self, p0, p1, dash=7.0, gap=6.0, width=1.6, amp=0.5):
+        (x0, y0), (x1, y1) = p0, p1
+        length = math.hypot(x1 - x0, y1 - y0)
+        t = 0.0
+        while t < length:
+            t1 = min(t + dash * self.rng.uniform(0.8, 1.2), length)
+            a, b = t / length, t1 / length
+            self.line((x0 + (x1 - x0) * a, y0 + (y1 - y0) * a), (x0 + (x1 - x0) * b, y0 + (y1 - y0) * b),
+                      width=width, amp=amp)
+            t = t1 + gap
+        self.mark((min(x0, x1), min(y0, y1) - 2, max(x0, x1), max(y0, y1) + 2))
+
+    def rect(self, x0, y0, x1, y1, width=2.0, amp=1.0):
+        """Hand-drawn rectangle outline: four separate strokes that slightly overshoot the corners."""
+        o = lambda: self.rng.uniform(1, 4)
+        self.line((x0 - o(), y0), (x1 + o(), y0 + self.rng.uniform(-1, 1)), width=width, amp=amp)
+        self.line((x1, y0 - o()), (x1 + self.rng.uniform(-1, 1), y1 + o()), width=width, amp=amp)
+        self.line((x1 + o(), y1), (x0 - o(), y1 + self.rng.uniform(-1, 1)), width=width, amp=amp)
+        self.line((x0, y1 + o()), (x0 + self.rng.uniform(-1, 1), y0 - o()), width=width, amp=amp)
+
+    def curve(self, pts, width=2.0, amp=0.5, color=None, steps=10):
+        """Smooth Catmull-Rom curve through pts."""
+        if len(pts) < 3:
+            self.stroke(pts, width=width, amp=amp, color=color)
+            return
+        ext = [pts[0]] + list(pts) + [pts[-1]]
+        out = []
+        for i in range(1, len(ext) - 2):
+            p0, p1, p2, p3 = ext[i - 1], ext[i], ext[i + 1], ext[i + 2]
+            for k in range(steps):
+                t = k / steps
+                out.append(tuple(0.5 * (2 * p1[j] + (-p0[j] + p2[j]) * t + (2 * p0[j] - 5 * p1[j] + 4 * p2[j] - p3[j]) * t * t
+                                        + (-p0[j] + 3 * p1[j] - 3 * p2[j] + p3[j]) * t ** 3) for j in (0, 1)))
+        out.append(pts[-1])
+        self.stroke(out, width=width, amp=amp, color=color)
+
     def ink_fill(self, pts):
         self.di.polygon(self._scaled(pts), fill=0)
 
@@ -170,17 +206,18 @@ class Sketch:
 # Weather icons (black ink only), drawn into the square box (x, y, s)
 # ---------------------------------------------------------------------------
 
-def _sun(sk, cx, cy, r, rays=True):
-    sk.shape(ellipse_pts(cx, cy, r, r, n=28, start=sk.rng.uniform(0, 6)), fill=None, width=2)
+def _sun(sk, cx, cy, r, rays=True, tint=False):
+    sk.shape(ellipse_pts(cx, cy, r, r, n=28, start=sk.rng.uniform(0, 6)), fill=YELLOW if tint else None, width=2)
     if rays:
         for i in range(8):
             a = i * math.pi / 4 + sk.rng.uniform(-0.12, 0.12)
             r0, r1 = r * 1.45, r * (1.9 + sk.rng.uniform(-0.12, 0.12))
             sk.line((cx + r0 * math.cos(a), cy + r0 * math.sin(a)),
-                    (cx + r1 * math.cos(a), cy + r1 * math.sin(a)), width=1.8, amp=0.3)
+                    (cx + r1 * math.cos(a), cy + r1 * math.sin(a)), width=1.8, amp=0.3,
+                    color=ORANGE if tint else None)
 
 
-def _moon(sk, cx, cy, r):
+def _moon(sk, cx, cy, r, tint=False):
     """Crescent: points of the outer disc outside a shifted disc, then back along the inner disc."""
     ox, oy, ir = cx + r * 0.55, cy - r * 0.35, r * 0.85
     n = 120
@@ -199,7 +236,7 @@ def _moon(sk, cx, cy, r):
     a, b = run(outer, out_keep), run(inner, in_keep)
     if math.hypot(a[-1][0] - b[0][0], a[-1][1] - b[0][1]) > math.hypot(a[-1][0] - b[-1][0], a[-1][1] - b[-1][1]):
         b = b[::-1]
-    sk.shape(a + b, fill=None, width=2)
+    sk.shape(a + b, fill=YELLOW if tint else None, width=2)
 
 
 def _cloud(sk, cx, cy, w, h):
@@ -226,18 +263,20 @@ def _cloud(sk, cx, cy, w, h):
     sk.shape(pts, fill=WHITE, width=2)
 
 
-def _drops(sk, x0, x1, y, kind, count):
+def _drops(sk, x0, x1, y, kind, count, tint=False):
+    c = BLUE if tint else None
     step = (x1 - x0) / max(count, 1)
     for i in range(count):
         px = x0 + step * (i + 0.5) + sk.rng.uniform(-1, 1)
         py = y + (i % 2) * 4
         k = kind if kind != 'sleet' else ('rain' if i % 2 == 0 else 'snow')
         if k == 'rain':
-            sk.line((px + 2, py), (px - 1.5, py + 8), width=2, amp=0.2)
+            sk.line((px + 2, py), (px - 1.5, py + 8), width=2.2 if tint else 2, amp=0.2, color=c)
         else:
             for a in (0, math.pi / 3, 2 * math.pi / 3):
                 dx, dy = 3.6 * math.cos(a), 3.6 * math.sin(a)
-                sk.line((px + 0.5 - dx, py + 4 - dy), (px + 0.5 + dx, py + 4 + dy), width=1.5, amp=0)
+                sk.line((px + 0.5 - dx, py + 4 - dy), (px + 0.5 + dx, py + 4 + dy), width=1.7 if tint else 1.5, amp=0,
+                        color=c)
 
 
 def _bolt(sk, x, y, s):
@@ -247,8 +286,11 @@ def _bolt(sk, x, y, s):
     sk.ink_fill(pts)
 
 
-def weather_icon(sk, code, x, y, s):
-    """Draw a hand-drawn icon for a Met.no symbol_code in the box (x, y, s, s)."""
+def weather_icon(sk, code, x, y, s, tint=True):
+    """Draw a hand-drawn icon for a Met.no symbol_code in the box (x, y, s, s).
+
+    tint adds palette colour accents (yellow sun/moon, blue rain/snow); False gives pure black ink.
+    """
     sk.mark((x, y, x + s, y + s), pad=2)
     code = code or 'cloudy'
     base, _, variant = code.partition('_')
@@ -257,9 +299,9 @@ def weather_icon(sk, code, x, y, s):
 
     if base == 'clearsky':
         if night:
-            _moon(sk, cx, cy, s * 0.32)
+            _moon(sk, cx, cy, s * 0.32, tint)
         else:
-            _sun(sk, cx, cy, s * 0.22)
+            _sun(sk, cx, cy, s * 0.22, tint=tint)
         return
     if base == 'fog':
         for i in range(3):
@@ -270,9 +312,9 @@ def weather_icon(sk, code, x, y, s):
     if base in ('fair', 'partlycloudy'):
         r = s * (0.2 if base == 'fair' else 0.17)
         if night:
-            _moon(sk, x + s * 0.36, y + s * 0.34, r * 1.25)
+            _moon(sk, x + s * 0.36, y + s * 0.34, r * 1.25, tint)
         else:
-            _sun(sk, x + s * 0.36, y + s * 0.36, r)
+            _sun(sk, x + s * 0.36, y + s * 0.36, r, tint=tint)
         cw = s * (0.5 if base == 'fair' else 0.66)
         _cloud(sk, x + s * 0.62, y + s * 0.66, cw, cw * 0.55)
         return
@@ -286,12 +328,57 @@ def weather_icon(sk, code, x, y, s):
     intensity = 1 if base.startswith('light') else 3 if base.startswith('heavy') else 2
     if 'showers' in base:
         if night:
-            _moon(sk, x + s * 0.26, y + s * 0.2, s * 0.19)
+            _moon(sk, x + s * 0.26, y + s * 0.2, s * 0.19, tint)
         else:
-            _sun(sk, x + s * 0.24, y + s * 0.22, s * 0.14)
+            _sun(sk, x + s * 0.24, y + s * 0.22, s * 0.14, tint=tint)
     _cloud(sk, x + s * 0.54, y + s * 0.38, s * 0.74, s * 0.4)
     if 'thunder' in base:
         _bolt(sk, x + s * 0.42, y + s * 0.6, s * 0.36)
-        _drops(sk, x + s * 0.16, x + s * 0.42, y + s * 0.66, kind, 1 + intensity // 2)
+        _drops(sk, x + s * 0.16, x + s * 0.42, y + s * 0.66, kind, 1 + intensity // 2, tint)
     else:
-        _drops(sk, x + s * 0.2, x + s * 0.88, y + s * 0.64, kind, intensity + 1)
+        _drops(sk, x + s * 0.2, x + s * 0.88, y + s * 0.64, kind, intensity + 1, tint)
+
+
+# ---------------------------------------------------------------------------
+# Small symbols for event rows and the weather chart, drawn into the box (x, y, s)
+# ---------------------------------------------------------------------------
+
+def bin_icon(sk, x, y, s):
+    k = s / 24.0
+    p = lambda px, py: (x + px * k, y + py * k)
+    sk.shape([p(5, 7), p(19, 7), p(17, 23), p(7, 23)], fill=GREEN, width=1.5, amp=0.3)
+    for lx in (10, 14):
+        sk.line(p(lx, 10), p(lx, 20), width=1.1, amp=0)
+    sk.line(p(3, 6), p(21, 5), width=1.8, amp=0.2)
+    sk.line(p(10, 3), p(14, 3), width=1.8, amp=0)
+
+
+def tooth_icon(sk, x, y, s):
+    k = s / 24.0
+    pts = [(4, 6), (6, 2), (10, 2.5), (12, 3.5), (14, 2.5), (18, 2), (20, 6), (19, 12), (17, 22), (15, 22),
+           (14, 17), (12, 15), (10, 17), (9, 22), (7, 22), (5, 12)]
+    sk.shape([(x + px * k, y + py * k) for px, py in pts], fill=WHITE, width=1.5, amp=0.2)
+
+
+def plane_icon(sk, x, y, s):
+    k = s / 32.0
+    pts = [(2, 15), (12, 14), (8, 4), (12, 4), (19, 14), (27, 14), (31, 16), (27, 18), (19, 18), (12, 28),
+           (8, 28), (12, 18), (2, 17)]
+    sk.shape([(x + px * k, y + py * k) for px, py in pts], fill=BLUE, width=1.4, amp=0.2)
+
+
+def star_icon(sk, x, y, s, color=YELLOW):
+    sk.shape(star_pts(x + s / 2, y + s * 0.54, s * 0.48, s * 0.21), fill=color, width=1.5, amp=0.2)
+
+
+def wind_icon(sk, x, y, s):
+    k = s / 32.0
+    p = lambda px, py: (x + px * k, y + py * k)
+    sk.stroke([p(2, 9), p(20, 9), p(25, 7), p(25, 2), p(21, 1)], width=1.8, amp=0.2)
+    sk.stroke([p(2, 16), p(26, 16), p(31, 19), p(30, 23), p(27, 23)], width=1.8, amp=0.2)
+
+
+def drop_icon(sk, x, y, s):
+    k = s / 20.0
+    pts = [(10, 0)] + [(10 + 8 * math.cos(a), 16 + 6 * math.sin(a)) for a in [-0.3 + i * (math.pi + 0.6) / 10 for i in range(11)]]
+    sk.shape([(x + px * k, y + py * k) for px, py in pts], fill=BLUE, width=1.4, amp=0.2)

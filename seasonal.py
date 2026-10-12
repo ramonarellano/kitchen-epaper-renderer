@@ -327,28 +327,160 @@ def easter_sunday(year):
     return datetime.date(year, month, day)
 
 
-def theme_for(d):
+def theme_key(d):
     m, day = d.month, d.day
     easter = easter_sunday(d.year)
     if (m == 12 and day >= 27) or (m == 1 and day <= 2):
-        return [firework, star, partial(firework), heart]
+        return 'newyear'
     if m == 12:
-        return [tree, gift, star, snowman, partial(gift, color=BLUE, ribbon=RED), snowflake]
+        return 'christmas'
     if easter - datetime.timedelta(days=7) <= d <= easter + datetime.timedelta(days=1):
-        return [egg, chick, partial(egg, color=ORANGE, band=BLUE), partial(tulip, color=YELLOW), chick]
+        return 'easter'
     if m == 5 and 10 <= day <= 17:
-        return [flag, balloon, partial(balloon, color=BLUE), icecream, flag]
+        return 'mai17'
     if m == 2 and 10 <= day <= 14:
-        return [heart, partial(heart, color=ORANGE), flower, heart]
+        return 'valentine'
     if (m == 10 and day >= 24) or (m == 11 and day == 1):
-        return [partial(pumpkin, face=True), ghost, pumpkin, leaf, partial(leaf, color=RED)]
+        return 'halloween'
     if m in (1, 2) or (m == 11 and day >= 20):
-        return [snowman, snowflake, mitten, partial(snowflake, color=BLUE), star]
+        return 'winter'
     if m in (3, 4, 5):
-        return [tulip, partial(flower, color=BLUE), partial(tulip, color=ORANGE), chick, partial(flower, color=RED)]
+        return 'spring'
     if m in (6, 7, 8):
-        return [sun, strawberry, icecream, partial(flower, color=RED), strawberry]
-    return [leaf, mushroom, partial(leaf, color=RED), apple, pumpkin, partial(leaf, color=YELLOW)]
+        return 'summer'
+    return 'autumn'
+
+
+# Per theme: doodles for leftover white space, and a little scene for the bottom-right vignette.
+# Scene items "stand" on the ground line: (doodle, x as fraction of width, size).
+# Floating items are spread over the sky above them: (doodle, size).
+THEMES = {
+    'newyear': dict(
+        doodles=[firework, star, firework, heart],
+        stand=[(star, 0.12, 34), (partial(gift, color=BLUE, ribbon=YELLOW), 0.78, 40)],
+        float=[(firework, 54), (firework, 40), (firework, 46), (star, 22)]),
+    'christmas': dict(
+        doodles=[tree, gift, star, snowman, partial(gift, color=BLUE, ribbon=RED), snowflake],
+        stand=[(gift, 0.12, 40), (tree, 0.42, 92), (partial(gift, color=BLUE, ribbon=RED), 0.68, 32),
+               (partial(gift, color=GREEN, ribbon=YELLOW), 0.86, 40)],
+        float=[(snowflake, 22), (snowflake, 16), (snowflake, 20), (snowflake, 14), (star, 20)]),
+    'easter': dict(
+        doodles=[egg, chick, partial(egg, color=ORANGE, band=BLUE), partial(tulip, color=YELLOW), chick],
+        stand=[(partial(tulip, color=YELLOW), 0.1, 56), (chick, 0.36, 56), (egg, 0.62, 44),
+               (partial(egg, color=ORANGE, band=BLUE), 0.84, 40)],
+        float=[(partial(heart, color=YELLOW), 18), (partial(flower, color=YELLOW), 22)]),
+    'mai17': dict(
+        doodles=[flag, balloon, partial(balloon, color=BLUE), icecream, flag],
+        stand=[(flag, 0.12, 70), (icecream, 0.5, 52), (flag, 0.82, 70)],
+        float=[(balloon, 44), (partial(balloon, color=BLUE), 40), (partial(balloon, color=WHITE), 34)]),
+    'valentine': dict(
+        doodles=[heart, partial(heart, color=ORANGE), flower, heart],
+        stand=[(partial(flower, color=RED), 0.14, 56), (partial(tulip, color=RED), 0.5, 56),
+               (partial(flower, color=ORANGE), 0.84, 50)],
+        float=[(heart, 30), (heart, 20), (partial(heart, color=ORANGE), 24)]),
+    'halloween': dict(
+        doodles=[partial(pumpkin, face=True), ghost, pumpkin, leaf, partial(leaf, color=RED)],
+        stand=[(mushroom, 0.12, 46), (partial(pumpkin, face=True), 0.45, 64), (pumpkin, 0.8, 44)],
+        float=[(ghost, 40), (leaf, 26), (partial(leaf, color=RED), 22), (partial(leaf, color=YELLOW), 24)]),
+    'winter': dict(
+        doodles=[snowman, snowflake, mitten, partial(snowflake, color=BLUE), star],
+        stand=[(snowman, 0.2, 80), (partial(tree), 0.72, 80)],
+        float=[(snowflake, 22), (snowflake, 16), (snowflake, 20), (snowflake, 14), (snowflake, 18)]),
+    'spring': dict(
+        doodles=[tulip, partial(flower, color=BLUE), partial(tulip, color=ORANGE), chick, partial(flower, color=RED)],
+        stand=[(tulip, 0.1, 56), (partial(flower, color=BLUE), 0.32, 50), (chick, 0.58, 48),
+               (partial(tulip, color=ORANGE), 0.86, 52)],
+        float=[(partial(heart, color=RED), 16), (partial(flower, color=YELLOW), 20)]),
+    'summer': dict(
+        doodles=[sun, strawberry, icecream, partial(flower, color=RED), strawberry],
+        stand=[(strawberry, 0.12, 40), (icecream, 0.42, 58), (partial(flower, color=RED), 0.66, 52),
+               (strawberry, 0.88, 34)],
+        float=[(sun, 46)]),
+    'autumn': dict(
+        doodles=[leaf, mushroom, partial(leaf, color=RED), apple, pumpkin, partial(leaf, color=YELLOW)],
+        stand=[(mushroom, 0.1, 50), (mushroom, 0.3, 32), (pumpkin, 0.58, 56), (apple, 0.86, 38)],
+        float=[(leaf, 28), (partial(leaf, color=RED), 22), (partial(leaf, color=YELLOW), 26), (partial(leaf, color=RED), 20)]),
+}
+
+
+def theme_for(d):
+    return THEMES[theme_key(d)]['doodles']
+
+
+def _nth_sunday(year, month, n):
+    d = datetime.date(year, month, 1)
+    d += datetime.timedelta(days=(6 - d.weekday()) % 7)
+    return d + datetime.timedelta(weeks=n - 1)
+
+
+def special_days(year):
+    """Norwegian holidays and merkedager: list of (date, name, icon doodle or None, count down to it)."""
+    e = easter_sunday(year)
+    td = datetime.timedelta
+    D = lambda m, d: datetime.date(year, m, d)
+    return [
+        (D(1, 1), 'Nyttårsdag', None, False),
+        (_nth_sunday(year, 2, 2), 'Morsdag', heart, True),
+        (D(2, 14), 'Valentinsdagen', heart, True),
+        (e - td(days=7), 'Palmesøndag', None, False),
+        (e - td(days=3), 'Skjærtorsdag', None, False),
+        (e - td(days=2), 'Langfredag', None, False),
+        (e - td(days=1), 'Påskeaften', egg, True),
+        (e, '1. påskedag', egg, False),
+        (e + td(days=1), '2. påskedag', egg, False),
+        (D(5, 1), 'Arbeidernes dag', None, False),
+        (D(5, 17), '17. mai', flag, True),
+        (e + td(days=39), 'Kristi himmelfartsdag', None, False),
+        (e + td(days=49), '1. pinsedag', None, False),
+        (e + td(days=50), '2. pinsedag', None, False),
+        (D(6, 23), 'Sankthansaften', sun, True),
+        (D(10, 31), 'Halloween', partial(pumpkin, face=True), True),
+        (_nth_sunday(year, 11, 2), 'Farsdag', heart, True),
+        (D(12, 13), 'Luciadagen', star, False),
+        (D(12, 24), 'Julaften', star, True),
+        (D(12, 25), '1. juledag', star, False),
+        (D(12, 26), '2. juledag', star, False),
+        (D(12, 31), 'Nyttårsaften', firework, True),
+    ]
+
+
+def day_name(d):
+    """Name of a holiday / merkedag on date d, or None."""
+    return next((name for day, name, _, _ in special_days(d.year) if day == d), None)
+
+
+def next_countdown(d, within_days=60):
+    """Next holiday worth counting down to: (name, days_left, icon) or None."""
+    upcoming = [(day, name, icon) for y in (d.year, d.year + 1)
+                for day, name, icon, count in special_days(y) if count and day >= d]
+    day, name, icon = min(upcoming)
+    left = (day - d).days
+    return (name, left, icon) if left <= within_days else None
+
+
+def scene(sk, x, y, w, h, d):
+    """Seasonal scene in the box (x, y, w, h): a ground line with doodles standing on it and some in the air."""
+    t = THEMES[theme_key(d)]
+    rng = sk.rng
+    gy = y + h - 10
+    sk.stroke([(x, gy), (x + w * 0.3, gy - 2), (x + w * 0.6, gy + 1), (x + w, gy - 1)], width=1.6, amp=0.8)
+    for fx in (0.04, 0.4, 0.75, 0.97):
+        gx = x + w * fx
+        sk.line((gx, gy), (gx - 3, gy - 9), width=1.6, amp=0, color=GREEN)
+        sk.line((gx + 3, gy), (gx + 5, gy - 10), width=1.6, amp=0, color=GREEN)
+    tallest = 0
+    for fn, fx, size in t['stand']:
+        bx = min(max(x + w * fx - size / 2, x), x + w - size)
+        fn(sk, bx, gy - size * 0.95, size)
+        tallest = max(tallest, size)
+    # Floating items share the band above the ground items, spread evenly with some jitter
+    sky_top, sky_bottom = y, gy - tallest * 0.75
+    n = len(t['float'])
+    for i, (fn, size) in enumerate(t['float']):
+        fx = x + (i + 0.5) * w / n - size / 2 + rng.uniform(-8, 8)
+        fy = sky_top + rng.uniform(0, max(0, sky_bottom - sky_top - size))
+        fn(sk, min(max(fx, x), x + w - size), fy, size)
+    sk.mark((x, y, x + w, y + h))
 
 
 # ---- placement in empty space ----
