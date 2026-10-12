@@ -186,6 +186,7 @@ def _until(d, shown_on):
 
 def _prepare_event(start, end, summary, shown_on):
     """Turn a calendar event into a display row for the date shown_on."""
+    summary = summary.strip()
     who, title = '', summary
     m = PEOPLE_PREFIX.match(summary)
     if m:
