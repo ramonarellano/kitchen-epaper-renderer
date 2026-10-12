@@ -1,10 +1,13 @@
-import os, io, datetime, json, requests, locale
-from PIL import Image, ImageDraw, ImageFont
+import os, io, datetime, json, requests
+from PIL import Image
 from googleapiclient.discovery import build
 from google.oauth2 import service_account
 from google.cloud import secretmanager
 import logging
 import pytz
+
+from sketch import Sketch, Font, weather_icon
+from seasonal import decorate
 
 # env vars (set these when deploying)
 CALENDAR_ID = os.environ['CALENDAR_ID']
@@ -15,23 +18,29 @@ SECRET_NAME = os.environ['SECRET_NAME']  # e.g. "projects/12345/secrets/calendar
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 
-# Load icons & fonts once on cold start
-ICON_DIR = 'icons'  # Use relative path for local dev
-FONT_DIR = 'fonts'
-ROBOTO_PATH = os.path.join(FONT_DIR, 'Roboto-Regular.ttf')
-font_header = ImageFont.truetype(ROBOTO_PATH, 24)  # match left-side title size
-font_date   = ImageFont.truetype(ROBOTO_PATH, 24)  # smaller date title font
-font_event  = ImageFont.truetype(ROBOTO_PATH, 20)  # smaller event name font
-font_weather= ImageFont.truetype(ROBOTO_PATH, 20)
-font_small  = ImageFont.truetype(ROBOTO_PATH, 18)
+# All displayed times and day boundaries use Norwegian local time
+OSLO_TZ = pytz.timezone('Europe/Oslo')
 
-try:
-    locale.setlocale(locale.LC_TIME, 'nb_NO.UTF-8')
-except locale.Error:
-    try:
-        locale.setlocale(locale.LC_TIME, 'no_NO.UTF-8')
-    except locale.Error:
-        pass  # fallback to system default if Norwegian locale not available
+# Load fonts once on cold start (Kalam: handwritten, SIL Open Font License)
+FONT_DIR = 'fonts'
+KALAM_REGULAR = os.path.join(FONT_DIR, 'Kalam-Regular.ttf')
+KALAM_BOLD    = os.path.join(FONT_DIR, 'Kalam-Bold.ttf')
+font_heading = Font(KALAM_BOLD, 26)     # day / weather section headings
+font_time    = Font(KALAM_REGULAR, 19)  # event times
+font_event   = Font(KALAM_REGULAR, 22)  # event titles
+font_wx      = Font(KALAM_REGULAR, 21)  # weather hour
+font_temp    = Font(KALAM_BOLD, 23)     # weather temperature
+font_wx_small= Font(KALAM_REGULAR, 18)  # precipitation and wind
+font_tiny    = Font(KALAM_REGULAR, 15)  # last updated
+
+# Norwegian names, independent of which locales the runtime has installed
+WEEKDAYS = ['mandag', 'tirsdag', 'onsdag', 'torsdag', 'fredag', 'lørdag', 'søndag']
+MONTHS = ['januar', 'februar', 'mars', 'april', 'mai', 'juni', 'juli',
+          'august', 'september', 'oktober', 'november', 'desember']
+
+def norwegian_date(d):
+    """e.g. 'mandag 12. oktober'"""
+    return f"{WEEKDAYS[d.weekday()]} {d.day}. {MONTHS[d.month - 1]}"
 
 def load_credentials():
     client = secretmanager.SecretManagerServiceClient()
@@ -75,13 +84,13 @@ def get_weather():
     data = requests.get(url, headers=headers).json()
     # Get periods: every 2 hours for today and tomorrow, starting at 08:00
     periods = list(range(8, 24, 2))  # 8, 10, ..., 22
-    now = datetime.datetime.utcnow()
+    now = datetime.datetime.now(tz=OSLO_TZ)
     today = now.date()
-    tomorrow = (now + datetime.timedelta(days=1)).date()
+    tomorrow = today + datetime.timedelta(days=1)
     current_hour = now.hour
     times = []
     for ts in data['properties']['timeseries']:
-        t = datetime.datetime.fromisoformat(ts['time'].replace('Z','+00:00'))
+        t = datetime.datetime.fromisoformat(ts['time'].replace('Z','+00:00')).astimezone(OSLO_TZ)
         # For today, only include periods >= current hour (rounded up to next even hour)
         if t.date() == today:
             # Find the next period >= now (e.g., if now is 11:15, show 12:00 and later)
@@ -91,7 +100,7 @@ def get_weather():
             times.append(ts)
     details = []
     for ts in times:
-        t = datetime.datetime.fromisoformat(ts['time'].replace('Z','+00:00'))
+        t = datetime.datetime.fromisoformat(ts['time'].replace('Z','+00:00')).astimezone(OSLO_TZ)
         day = t.date()
         hour = t.hour
         temp = ts['data']['instant']['details']['air_temperature']
@@ -113,176 +122,119 @@ def get_weather():
         })
     return details
 
-def render_image(events, weather):
-    W,H = 800,480
-    # Use a much lighter yellow for the background
-    LIGHT_YELLOW = (255, 255, 180)
-    img = Image.new('RGB',(W,H), LIGHT_YELLOW)  # Set background to lighter yellow
-    draw = ImageDraw.Draw(img)
+W, H = 800, 480
+MARGIN = 22
+DIVIDER_X = 400
 
-    margin = 24
-    cal_w = int(W*0.5) - margin
-    wx_x = int(W*0.5) + margin
-    wx_w = int(W*0.5) - 2*margin
-    y = margin
-    block_h = 32
+def _heading(sk, x, baseline, text):
+    """Bold handwritten heading with a hand-drawn underline."""
+    box = sk.text((x, baseline), text, font_heading)
+    w = box[2] - x
+    sk.stroke([(x - 2, baseline + 7), (x + w * 0.55, baseline + 5 + sk.rng.uniform(-1, 1)), (x + w + 6, baseline + 6)],
+              width=2, amp=0.8)
+    sk.mark((x - 2, baseline, x + w + 8, baseline + 10), pad=2)
+
+def _truncate(text, font, max_w):
+    if font.width(text) <= max_w:
+        return text
+    while text and font.width(text + '…') > max_w:
+        text = text[:-1]
+    return text.rstrip() + '…'
+
+def _event_time(start, end):
+    # All-day events have date-only start/end ('YYYY-MM-DD')
+    if len(start) == 10:
+        return "Hele dagen"
+    try:
+        st = datetime.datetime.fromisoformat(start.replace('Z','+00:00')).astimezone(OSLO_TZ)
+        et = datetime.datetime.fromisoformat(end.replace('Z','+00:00')).astimezone(OSLO_TZ)
+        return f"{st.strftime('%H:%M')}–{et.strftime('%H:%M')}"
+    except Exception:
+        return "Hele dagen"
+
+def render_image(events, weather, now=None):
+    now = now or datetime.datetime.now(tz=OSLO_TZ)
+    today = now.date()
+    tomorrow = today + datetime.timedelta(days=1)
+    # Seed by date so the hand-drawn wobble and doodles stay put between refreshes in a day
+    sk = Sketch(W, H, seed=today.toordinal())
+
     # --- Left: Calendar ---
     from collections import defaultdict
     events_by_date = defaultdict(list)
     for date, start, end, summary in events:
         events_by_date[date].append((start, end, summary))
-    y = margin
-    max_y = H - margin
-    # Fill up the left side with events from as many days as needed
-    for date, summaries in sorted(events_by_date.items()):
-        if y + font_date.size > max_y:
+    x0 = MARGIN
+    col_right = DIVIDER_X - 16
+    times = [_event_time(st, et) for items in events_by_date.values() for st, et, _ in items]
+    title_x = x0 + 8 + max([font_time.width(t) for t in times] or [0]) + 12
+    max_y = H - MARGIN
+    y = MARGIN - 4
+    if not events_by_date:
+        _heading(sk, x0, y + 28, "Ingen avtaler")
+    for date, items in sorted(events_by_date.items()):
+        if y + 28 + 14 + 26 > max_y:  # room for heading and at least one event
             break
-        # Format date as 'Mandag 5. januar' in Norwegian (no leading zero)
-        try:
-            dt = datetime.datetime.strptime(date, "%Y-%m-%d")
-            day = dt.day
-            month_str = dt.strftime("%B")
-            date_str = dt.strftime("%A") + f" {day}. {month_str}"
-            date_str = date_str.capitalize()
-        except Exception:
-            date_str = date
-        draw.text((margin, y), date_str, font=font_date, fill=(0,0,0))
-        y += font_date.size + 2  # Add a tiny bit of space after the date title
-        y += 4  # Extra tiny space between title and events
-        for start, end, summary in summaries:
-            if y + font_event.size + 8 > max_y:
-                break
-            # Draw green box
-            box_x0 = margin+10
-            box_y0 = y
-            box_x1 = margin+cal_w-10
-            box_y1 = y + font_event.size + 8
-            draw.rectangle([box_x0, box_y0, box_x1, box_y1], fill=(120,220,120), outline=(60,180,60), width=2)
-            # Format time
-            try:
-                st = datetime.datetime.fromisoformat(start.replace('Z','+00:00'))
-                et = datetime.datetime.fromisoformat(end.replace('Z','+00:00'))
-                time_str = f"{st.strftime('%H:%M')}-{et.strftime('%H:%M')}"
-            except Exception:
-                time_str = "All day"
-            # Truncate summary if too long
-            time_x = box_x0+6
-            event_x = box_x0+120  # start event title further right
-            max_event_width = box_x1 - event_x - 8
-            event_text = summary
-            while draw.textlength(event_text, font=font_event) > max_event_width and len(event_text) > 3:
-                event_text = event_text[:-1]
-            if event_text != summary:
-                event_text = event_text[:-3] + '...'
-            # Draw time and summary
-            draw.text((time_x, box_y0+2), time_str, font=font_small, fill=(0,0,0))  # black text
-            draw.text((event_x, box_y0+2), event_text, font=font_event, fill=(0,0,0))  # black text
-            y += font_event.size + 12
+        d = datetime.date.fromisoformat(date)
+        label = norwegian_date(d)
+        if d == today:
+            label = f"I dag, {label}"
+        elif d == tomorrow:
+            label = f"I morgen, {label}"
+        y += 28
+        _heading(sk, x0, y, label[0].upper() + label[1:])
         y += 10
-        if y + font_date.size > max_y:
-            break
-    # --- Right: Weather ---
-    now = datetime.datetime.utcnow()
-    today_date = now.date()
-    tomorrow_date = (now + datetime.timedelta(days=1)).date()
-    # Format dates as 'mandag 7. juli' in Norwegian (no leading zero, lowercase weekday, dash separator)
-    try:
-        today_dt = now
-        today_day = today_dt.day
-        today_month = today_dt.strftime('%B')
-        today_weekday = today_dt.strftime('%A').lower()
-        today_str = f"{today_weekday} {today_day}. {today_month}"
-        today_str = today_str  # already lowercase
-        tomorrow_dt = now + datetime.timedelta(days=1)
-        tomorrow_day = tomorrow_dt.day
-        tomorrow_month = tomorrow_dt.strftime('%B')
-        tomorrow_weekday = tomorrow_dt.strftime('%A').lower()
-        tomorrow_str = f"{tomorrow_weekday} {tomorrow_day}. {tomorrow_month}"
-    except Exception:
-        today_str = now.strftime('%A %-d.%m.%Y').lower()
-        tomorrow_str = (now + datetime.timedelta(days=1)).strftime('%A %-d.%m.%Y').lower()
-    draw.text((wx_x, margin), f"Oslo idag - {today_str}", font=font_date, fill=(0,0,0))  # Match left-side title size
-    y_wx = margin + font_date.size + 10
-    # Make weather rows and icons smaller to fit all periods (08:00-22:00) on screen
-    row_h = int((H - y_wx - margin) / 8)  # 8 periods: 08,10,...,22
-    icon_size = min(row_h-8, 64)          # slightly smaller icons, max 64px
-    # Split weather into today and tomorrow using the new 'date' field
-    now = datetime.datetime.utcnow()
-    today_date = now.date()
-    tomorrow_date = (now + datetime.timedelta(days=1)).date()
-    today_periods = [p for p in weather if p.get('date') == today_date]
-    # For tomorrow, only include periods from 06:00 and later
-    tomorrow_periods = [p for p in weather if p.get('date') == tomorrow_date and p.get('hour', 0) >= 6]
-    # Draw today's weather
-    for period in today_periods[:8]:                # show up to 8 periods
-        hour = period['hour']
-        temp = period['temp']
-        wind = period['wind']
-        precip = period['precip']
-        icon = period['icon']
-        icon_path = os.path.join('icons', f"{icon}.png")  # Always use root icons folder
-        icon_img = Image.open(icon_path).resize((icon_size,icon_size), Image.Resampling.LANCZOS)
-        img.paste(icon_img, (wx_x, y_wx), icon_img)
-        # Vertically center the text relative to the icon
-        text_y = y_wx + (icon_size - font_weather.size) // 2
-        draw.text((wx_x+icon_size+8, text_y), f"{hour:02d}:00", font=font_weather, fill=(0,0,0))
-        draw.text((wx_x+icon_size+70, text_y), f"{int(temp)}°C", font=font_weather, fill=(200,0,0))
-        draw.text((wx_x+icon_size+140, text_y), f"{precip:.1f}mm", font=font_weather, fill=(0,0,0))
-        draw.text((wx_x+icon_size+230, text_y), f"{wind:.1f}m/s", font=font_weather, fill=(0,0,0))
-        y_wx += row_h
-    # Draw tomorrow's weather if there is space
-    if tomorrow_periods and y_wx + font_date.size + 10 < H - margin:
-        tomorrow_title_y = y_wx + 10
-        draw.text((wx_x, tomorrow_title_y), f"Oslo imorgen - {tomorrow_str}", font=font_date, fill=(0,0,0))
-        y_wx = tomorrow_title_y + font_date.size + 10
-        for period in tomorrow_periods[:8]:
-            if y_wx + icon_size > H - margin:
+        for start, end, summary in items:
+            if y + 27 > max_y:
                 break
-            hour = period['hour']
-            temp = period['temp']
-            wind = period['wind']
-            precip = period['precip']
-            icon = period['icon']
-            icon_path = os.path.join('icons', f"{icon}.png")
-            icon_img = Image.open(icon_path).resize((icon_size,icon_size), Image.Resampling.LANCZOS)
-            img.paste(icon_img, (wx_x, y_wx), icon_img)
-            text_y = y_wx + (icon_size - font_weather.size) // 2
-            draw.text((wx_x+icon_size+8, text_y), f"{hour:02d}:00", font=font_weather, fill=(0,0,0))
-            draw.text((wx_x+icon_size+70, text_y), f"{int(temp)}°C", font=font_weather, fill=(200,0,0))
-            draw.text((wx_x+icon_size+140, text_y), f"{precip:.1f}mm", font=font_weather, fill=(0,0,0))
-            draw.text((wx_x+icon_size+230, text_y), f"{wind:.1f}m/s", font=font_weather, fill=(0,0,0))
-            y_wx += row_h
-    # --- After drawing everything, remap image to 7-color palette for preview ---
-    # Add last updated text in lower right corner (Central European Time)
-    cet = pytz.timezone('Europe/Oslo')
-    last_updated_dt = datetime.datetime.now(tz=pytz.utc).astimezone(cet)
-    last_updated = last_updated_dt.strftime('Last updated %Y-%m-%d %H:%M')
-    bbox = font_small.getbbox(last_updated)
-    text_w, text_h = bbox[2] - bbox[0], bbox[3] - bbox[1]
-    draw.text((W - text_w - 10, H - text_h - 6), last_updated, font=font_small, fill=(0,0,0))
+            y += 27
+            sk.text((x0 + 8, y), _event_time(start, end), font_time)
+            sk.text((title_x, y), _truncate(summary, font_event, col_right - title_x), font_event)
+            sk.mark((x0, y - 20, col_right, y + 6))  # keep doodles out of the row
+        y += 12
 
-    # Create a custom 7-color palette image for quantization
-    palette_colors = [
-        (0, 0, 0),        # black
-        (255, 255, 180),  # lighter yellow (background)
-        (0, 255, 0),      # green
-        (0, 0, 255),      # blue
-        (255, 0, 0),      # red
-        (255, 255, 255),  # white
-        (255, 165, 0),    # orange
-    ]
-    pal_img = Image.new('P', (1, 1))
-    pal_flat = []
-    for rgb in palette_colors:
-        pal_flat.extend(rgb)
-    # Pad to 256 colors
-    pal_flat += [0] * (256*3 - len(pal_flat))
-    pal_img.putpalette(pal_flat)
+    # --- Divider ---
+    sk.stroke([(DIVIDER_X, MARGIN + 6), (DIVIDER_X + 1.5, H / 2), (DIVIDER_X - 0.5, H - MARGIN - 6)],
+              width=2, amp=1.3)
+    sk.mark((DIVIDER_X - 4, MARGIN, DIVIDER_X + 4, H - MARGIN), pad=4)
 
-    # Dither and quantize
-    dithered = img.quantize(palette=pal_img, dither=Image.FLOYDSTEINBERG)
+    # --- Right: Weather ---
+    wx_x = DIVIDER_X + 22
+    wx_right = W - MARGIN
+    icon_size, row_h = 38, 42
+    wx_max_y = H - 28  # keep room for the last-updated line
+    today_periods = [p for p in weather if p.get('date') == today]
+    # For tomorrow, only include periods from 06:00 and later
+    tomorrow_periods = [p for p in weather if p.get('date') == tomorrow and p.get('hour', 0) >= 6]
+    y = MARGIN - 4
+    for title, periods in (("Været i dag", today_periods), ("I morgen", tomorrow_periods)):
+        if not periods or y + 28 + 10 + row_h > wx_max_y:
+            continue
+        y += 28
+        _heading(sk, wx_x, y, title)
+        y += 12
+        for p in periods[:8]:
+            if y + row_h > wx_max_y:
+                break
+            weather_icon(sk, p['icon'], wx_x, y, icon_size)
+            baseline = y + 28
+            sk.text((wx_x + icon_size + 10, baseline), f"{p['hour']:02d}:00", font_wx)
+            sk.text((wx_x + icon_size + 118, baseline), f"{round(p['temp'])}°", font_temp, anchor='rs')
+            if p['precip'] >= 0.1:
+                sk.text((wx_x + icon_size + 130, baseline), f"{p['precip']:.1f} mm".replace('.', ','), font_wx_small)
+            sk.text((wx_right, baseline), f"{round(p['wind'])} m/s", font_wx_small, anchor='rs')
+            sk.mark((wx_x, y, wx_right, y + icon_size))  # keep doodles out of the row
+            y += row_h
+        y += 6
+
+    # Last updated (Norwegian local time), lower right corner
+    sk.text((W - MARGIN, H - 8), f"Oppdatert {now.strftime('%H:%M')}", font_tiny, anchor='rs')
+
+    # Seasonal doodles in whatever white space is left
+    decorate(sk, today)
+
     buf = io.BytesIO()
-    dithered.save(buf, 'PNG')
+    sk.flatten().save(buf, 'PNG')
     return buf.getvalue()
 
 def pil_to_waveshare_7in3f_raw(img):

@@ -99,10 +99,11 @@ Set the following environment variables for your deployment (Cloud Function, loc
 ---
 
 ## Rendering Details
-- **Left side:** Agenda, with Norwegian date titles (e.g. "Mandag 25. januar"), green event boxes, truncated titles
-- **Right side:** Weather, 8 periods, large icons, time/temp/precip/wind
-- **Fonts:** Roboto (in `fonts/`)
-- **Icons:** PNGs (in `icons/png/`), mapped to Met.no symbol codes
+- **Style:** hand-drawn look — black handwritten text (Kalam, in `fonts/`, SIL OFL) on white, wobbly hand-drawn lines
+- **Left side:** Agenda with Norwegian date headings ("I dag, mandag 12. oktober"), times in Oslo local time, "Hele dagen" for all-day events
+- **Right side:** Weather for today and tomorrow in 2-hour periods, with hand-drawn black/white icons drawn in code (`sketch.py`)
+- **Doodles:** empty white areas get small colored doodles matching the season or holiday (jul, nyttår, påske, 17. mai, halloween, …) — see `seasonal.py`
+- **Colors:** only the 7 exact panel colors are used, no dithering, so the PNG preview matches the panel
 - **Output:** PNG, JPEG, or raw 7-color (Waveshare format)
 
 ---
