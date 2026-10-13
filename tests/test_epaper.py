@@ -57,6 +57,11 @@ def _calendar_items(today):
         {'start': {'dateTime': at(3, '16:30')}, 'end': {'dateTime': at(3, '18:30')}, 'summary': 'K&R&E: 9A1 Høsttreff'},
         {'start': {'dateTime': at(4, '12:00')}, 'end': {'dateTime': at(6, '12:00')}, 'summary': 'R og S:Tusenfryd'},
         {'start': {'dateTime': at(5, '09:00')}, 'end': {'dateTime': at(5, '10:00')}},  # no title
+        {'start': {'date': iso(0)}, 'end': {'date': iso(1)}, 'summary': 'Thomas Seeberg Torjussen sin bursdag'},
+        {'start': {'date': iso(1)}, 'end': {'date': iso(2)}, 'summary': 'Bursdag Ingrid '},
+        {'start': {'date': iso(3)}, 'end': {'date': iso(4)}, 'summary': 'Magdalena bursdag 85'},
+        {'start': {'date': iso(3)}, 'end': {'date': iso(4)}, 'summary': 'E: Bursdag Sileih og Ragnhild'},
+        {'start': {'dateTime': at(4, '17:00')}, 'end': {'dateTime': at(4, '20:00')}, 'summary': 'Invitert til bursdag Paulina'},
     ]
 
 
@@ -124,6 +129,12 @@ class EpaperEndpointTest(unittest.TestCase):
         self.assertEqual(len(body), 800 * 480 // 2)
         self.assertTrue(all((b >> 4) < 7 and (b & 0xF) < 7 for b in body), "palette index out of range")
 
+    def test_birthday_replaces_season_field(self):
+        drawn = []
+        with mock.patch.object(main, '_draw_birthday', lambda sk, names: drawn.append(names)):
+            self.call('png')
+        self.assertEqual(drawn, [['Thomas Seeberg Torjussen']])
+
     def test_jpeg(self):
         body, headers = self.call('jpeg')
         self.assertEqual(headers['Content-Type'], 'image/jpeg')
@@ -152,6 +163,16 @@ class RenderAcrossTheYearTest(unittest.TestCase):
                              for i in range(48)]
                     png = main.render_image(events, {'now': hours[0], 'hours': hours}, now=now)
                     self.assertEqual(Image.open(io.BytesIO(png)).size, (800, 480))
+
+    def test_birthdays(self):
+        now = main.OSLO_TZ.localize(datetime.datetime(2026, 10, 13, 7, 30))
+        people = ['Thomas Seeberg Torjussen sin bursdag', 'Tord Finstad sin bursdag',
+                  'Silvana Arellano Cohen sin bursdag', 'Ruth ICE Arellano sin bursdag']
+        for n in range(1, len(people) + 1):
+            with self.subTest(people=n):
+                events = [('2026-10-13', '2026-10-13', '2026-10-14', p) for p in people[:n]]
+                png = main.render_image(events, {'now': None, 'hours': []}, now=now)
+                self.assertEqual(Image.open(io.BytesIO(png)).size, (800, 480))
 
     def test_empty_calendar_and_weather(self):
         png = main.render_image([], {'now': None, 'hours': []})
@@ -192,6 +213,45 @@ class ShortTitleTest(unittest.TestCase):
     def test_fit_words_does_not_end_on_little_word(self):
         cut = main.fit_words('Lunsj med kolleger fra jobben i byen', main.font_title, 300)
         self.assertFalse(cut.split()[-1] in main.DANGLING, cut)
+
+
+class BirthdayTest(unittest.TestCase):
+    def test_names(self):
+        for title, name in {'Thomas Seeberg Torjussen sin bursdag': 'Thomas Seeberg Torjussen',
+                            'Bursdag: Kari': 'Kari', 'Ola 50 år': 'Ola', "Kari's birthday": 'Kari',
+                            'Bursdag Ingrid ': 'Ingrid', 'Magdalena bursdag 85': 'Magdalena',
+                            'Sofi bursdag 05': 'Sofi', 'Karis bursdag': 'Kari', 'Thomas bursdag': 'Thomas'}.items():
+            with self.subTest(title=title):
+                self.assertEqual(main.birthday_name(title), name)
+
+    def test_which_events_are_birthdays(self):
+        allday = AgendaLayoutTest.allday
+        cases = {allday(0, 'Simon bursdag'): True, allday(0, 'E: Bursdag Sileih og Ragnhild'): False,
+                 AgendaLayoutTest.timed(0, '17:00', 'Invitert til bursdag Paulina'): False,
+                 allday(0, 'Bursdagsfest'): False, allday(0, 'Ramon Kristian Arellano sin bursdag'): True}
+        for event, expected in cases.items():
+            with self.subTest(title=event[3]):
+                self.assertEqual(main.parse_events([event])[0]['birthday'], expected)
+
+    def test_birthdays_stay_out_of_the_agenda(self):
+        allday = AgendaLayoutTest.allday
+        events = [allday(0, 'Thomas bursdag'), allday(1, 'Bursdag Ingrid'), allday(2, 'Simon bursdag')]
+        drawn = {}
+        with mock.patch.object(main, '_draw_birthday', lambda sk, names: drawn.setdefault('names', names)), \
+                mock.patch.object(main, '_draw_agenda', lambda sk, evs, today: drawn.setdefault('agenda', evs)):
+            main.render_image(events, {'now': None, 'hours': []}, now=AgendaLayoutTest.NOW)
+        self.assertEqual(drawn['names'], ['Thomas'])
+        # Only tomorrow's birthday reaches the agenda, as a balloon by "I morgen"
+        self.assertEqual([e['name'] for e in drawn['agenda']], ['Ingrid'])
+        self.assertIs(drawn['agenda'][0]['icon'], main.balloon)
+
+    def test_lines_fit_the_field(self):
+        max_w = main.RE - main.RX - 58
+        for names in (['Thomas Seeberg Torjussen'], ['Tord Finstad', 'Kari'], ['Tord', 'Silvana', 'Ruth', 'Emilie']):
+            with self.subTest(names=names):
+                lines = main._birthday_lines(names, max_w)
+                self.assertLessEqual(len(lines), 2)
+                self.assertTrue(all(main.font_countdown.width(l) <= max_w for l in lines), lines)
 
 
 class AgendaLayoutTest(unittest.TestCase):

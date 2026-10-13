@@ -263,9 +263,10 @@ def flag(sk, x, y, s):
              fill=None, opaque=False)
 
 
-def balloon(sk, x, y, s, color=RED):
+def balloon(sk, x, y, s, color=RED, string=True):
     m = _m(x, y, s)
-    sk.stroke(_pts(m, [(50, 74), (54, 82), (46, 90), (50, 98)]), width=1.4, amp=0.3)
+    if string:
+        sk.stroke(_pts(m, [(50, 74), (54, 82), (46, 90), (50, 98)]), width=1.4, amp=0.3)
     sk.shape(_pts(m, [(46, 76), (54, 76), (50, 70)]), fill=color, width=1.4, amp=0)
     sk.shape(_ell(m, 50, 40, 26, 32), fill=color)
     sk.stroke(_ell(m, 40, 28, 7, 12, n=12, start=3.4)[:4], width=1.5, amp=0)
@@ -458,16 +459,51 @@ def next_countdown(d, within_days=60):
     return (name, left, icon) if left <= within_days else None
 
 
-def scene(sk, x, y, w, h, d):
-    """Seasonal scene in the box (x, y, w, h): a ground line with doodles standing on it and some in the air."""
-    t = THEMES[theme_key(d)]
-    rng = sk.rng
+def _ground(sk, x, y, w, h):
+    """Hand-drawn ground line with tufts of grass at the bottom of the box; returns its y."""
     gy = y + h - 10
     sk.stroke([(x, gy), (x + w * 0.3, gy - 2), (x + w * 0.6, gy + 1), (x + w, gy - 1)], width=1.6, amp=0.8)
     for fx in (0.04, 0.4, 0.75, 0.97):
         gx = x + w * fx
         sk.line((gx, gy), (gx - 3, gy - 9), width=1.6, amp=0, color=GREEN)
         sk.line((gx + 3, gy), (gx + 5, gy - 10), width=1.6, amp=0, color=GREEN)
+    return gy
+
+
+def birthday_scene(sk, x, y, w, h):
+    """A bunch of balloons tied to a present standing on the ground line, in the box (x, y, w, h)."""
+    rng = sk.rng
+    gy = _ground(sk, x, y, w, h)
+    gs = min(48, h * 0.4)
+    gx, gtop = x + w * 0.5 - gs / 2, gy - gs * 0.95
+    knot = (gx + gs / 2, gtop + gs * 0.3)
+    # Balloons spread over the sky above the present, alternating high and low
+    colors = [RED, BLUE, YELLOW, GREEN, ORANGE]
+    size = min(58, (gtop - y) / 0.9)
+    n = 5
+    spots = []
+    for i in range(n):
+        bx = x + (i + 0.5) * w / n - size / 2 + rng.uniform(-4, 4)
+        by = y + (0 if i % 2 else size * 0.3) + rng.uniform(0, 4)
+        spots.append((min(max(bx, x), x + w - size), min(by, gtop - size * 0.8)))
+    # Strings first, so balloons and the present cover their ends
+    for bx, by in spots:
+        bottom = (bx + size / 2, by + size * 0.76)
+        mid = ((bottom[0] + knot[0]) / 2 + rng.uniform(-6, 6), (bottom[1] + knot[1]) / 2)
+        sk.curve([bottom, mid, knot], width=1.3, amp=0.3)
+    for (bx, by), c in zip(spots, colors):
+        balloon(sk, bx, by, size, color=c, string=False)
+    gift(sk, gx, gtop, gs, color=BLUE, ribbon=RED)
+    for fx in (0.12, 0.88):  # little presents on each side
+        gift(sk, x + w * fx - 13, gy - 25, 26, color=RED if fx < 0.5 else GREEN, ribbon=YELLOW)
+    sk.mark((x, y, x + w, y + h))
+
+
+def scene(sk, x, y, w, h, d):
+    """Seasonal scene in the box (x, y, w, h): a ground line with doodles standing on it and some in the air."""
+    t = THEMES[theme_key(d)]
+    rng = sk.rng
+    gy = _ground(sk, x, y, w, h)
     tallest = 0
     for fn, fx, size in t['stand']:
         bx = min(max(x + w * fx - size / 2, x), x + w - size)

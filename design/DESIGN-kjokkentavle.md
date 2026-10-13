@@ -156,6 +156,7 @@ Værikonene tegnes i svart med fargeaksenter: gul sol og måne med oransje strå
 ### 4.5 Sesongfelt (x 530–776, y 280–462)
 - **Nedtelling:** ikon (42 px) + «NN dager» (34, fet), «1 dag» eller «I dag!», og under det «til <høytid>» (22).
 - **Scene:** sesongfigurer på en håndtegnet bakkelinje med grønne gresstuster, og noen få dekorfigurer i luften. Figurene må ikke overlappe teksten.
+- **Bursdag:** Bursdager er heldagshendelser i familiekalenderen med ordet «bursdag» i tittelen og uten personprefiks («E: Bursdag Sileih» er en invitasjon og blir i agendaen, det samme gjelder fester med klokkeslett). Har noen bursdag i dag, erstattes hele feltet: ballong (46 px) + navnet (34, fet) og under det «har bursdag!» (22). Scenen er fem ballonger i hver sin farge med snorer knyttet til en gave på bakkelinjen, og to små gaver på sidene. Navnet hentes fra tittelen («Thomas Seeberg Torjussen sin bursdag», «Bursdag Ingrid», «Magdalena bursdag 85»). Fullt navn hvis det får plass, ellers fornavn + etternavn, ellers fornavn. To personer: «Tord og / Kari» på to linjer; flere: fornavn kommaseparert over maks to linjer. Morgendagens bursdager vises som ballongikon ved «I morgen»; senere bursdager vises ikke i agendaen. Bursdager fra Google-kontaktene kopieres til familiekalenderen av en månedlig synkronisering.
 
 ## 5. Korte titler
 

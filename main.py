@@ -8,7 +8,7 @@ import pytz
 
 from sketch import (Sketch, Font, weather_icon, ellipse_pts, bin_icon, tooth_icon, plane_icon, star_icon,
                     wind_icon, drop_icon, BLACK, RED, BLUE, GREEN, ORANGE)
-from seasonal import scene, special_days, next_countdown
+from seasonal import scene, birthday_scene, balloon, special_days, next_countdown
 
 # env vars (set these when deploying)
 CALENDAR_ID = os.environ['CALENDAR_ID']
@@ -67,6 +67,12 @@ DANGLING = {'i', 'på', 'med', 'og', 'om', 'til', 'fra', 'for', 'hos', 'av', 'en
 SHORT_TITLES = {
     'levere i barnehagen': 'Barnehagen',
 }
+
+# Birthdays are all-day events with "bursdag" in the title and no person prefix ("E: Bursdag Sileih" is an
+# invitation). "Thomas Seeberg Torjussen sin bursdag", "Bursdag Ingrid", "Magdalena bursdag 85" -> the name.
+BIRTHDAY = re.compile(r'\b(?:bursdag|birthday)\b', re.I)
+BIRTHDAY_WORDS = re.compile(r"\s+sin\s+bursdag\b|'s?\s+(?:bursdag|birthday)\b|\bbursdag\b|\bbirthday\b"
+                            r"|\bgratulerer med dagen\b|\b\d+(?:\s*år)?(?!\S)", re.I)
 
 # Keyword -> icon for all-day events (shown after the date / "I morgen" instead of a row)
 EVENT_ICONS = [
@@ -185,6 +191,13 @@ def short_title(summary):
     return who, re.sub(r'\s{2,}', ' ', title).strip(' :,&+/–-')
 
 
+def birthday_name(summary):
+    """Birthday event title -> the person's name."""
+    name = re.sub(r'\s{2,}', ' ', BIRTHDAY_WORDS.sub(' ', summary)).strip(' :,!–-') or summary.strip()
+    # "Karis bursdag" -> Kari, for the family's own names
+    return name[:-1] if name.endswith('s') and name[:-1] in NAMES else name
+
+
 def parse_events(events):
     """Calendar tuples -> dicts with Oslo-local first/last day, start time (None if all-day), people and title."""
     out = []
@@ -203,9 +216,11 @@ def parse_events(events):
                 last = max(first, (et - datetime.timedelta(microseconds=1)).date())
         except ValueError:
             continue
-        icon = next((fn for rx, fn in EVENT_ICONS if rx.search(summary)), star_icon)
+        birthday = st is None and bool(BIRTHDAY.search(summary)) and not PEOPLE_PREFIX.match(summary.strip())
+        icon = balloon if birthday else next((fn for rx, fn in EVENT_ICONS if rx.search(summary)), star_icon)
         out.append({'first': first, 'last': max(first, last), 'start': st, 'who': who,
-                    'title': title, 'icon': icon})
+                    'title': title, 'icon': icon, 'birthday': birthday,
+                    'name': birthday_name(summary) if birthday else None})
     out.sort(key=lambda e: (e['first'], e['start'] is not None, e['start'] or 0))
     return out
 
@@ -431,6 +446,43 @@ def _draw_weather(sk, hours, now):
     sk.dashed((RX + 6, TOP + 168), (RE - 4, TOP + 169), dash=8, gap=7, width=1.6, amp=0.6)
 
 
+def _birthday_lines(names, max_w):
+    """Names for the big text: full names if they fit, else first + last name, else first names; max 2 lines."""
+    def variants(n):
+        parts = n.split()
+        return [n, f"{parts[0]} {parts[-1]}", parts[0]] if len(parts) > 2 else [n, parts[0]]
+
+    fits = lambda t: font_countdown.width(t) <= max_w
+    best = lambda n, suffix='': next((v + suffix for v in variants(n) if fits(v + suffix)),
+                                     fit(n.split()[0] + suffix, font_countdown, max_w))
+    if len(names) == 1:
+        return [best(names[0])]
+    if len(names) == 2:
+        return [best(names[0], ' og'), best(names[1])]
+    # Several people: first names, comma separated over two lines
+    firsts = [n.split()[0] for n in names]
+    joined = ', '.join(firsts[:-1]) + ' og ' + firsts[-1]
+    lines = [[]]
+    for word in joined.split(' '):
+        if lines[-1] and not fits(' '.join(lines[-1] + [word])) and len(lines) < 2:
+            lines.append([])
+        lines[-1].append(word)
+    return [fit(' '.join(words), font_countdown, max_w) for words in lines]
+
+
+def _draw_birthday(sk, names):
+    """Balloons and the names of today's birthday people, in place of the season field."""
+    x, y, w = RX + 8, TOP + 182, RE - RX - 8
+    balloon(sk, x + 2, y - 2, 46)
+    lines = _birthday_lines(names, RE - x - 50)
+    for i, line in enumerate(lines):
+        sk.text((x + 50, y + 30 + i * 34), line, font_countdown)
+    y += 30 + (len(lines) - 1) * 34
+    sk.text((x + 50, y + 28), "har bursdag!", font_small)
+    y += 42
+    birthday_scene(sk, x, y, w, 462 - y)
+
+
 def _draw_season(sk, today):
     x, y, w = RX + 8, TOP + 182, RE - RX - 8
     countdown = next_countdown(today)
@@ -453,7 +505,11 @@ def _draw_season(sk, today):
 def render_image(events, weather, now=None):
     now = now or datetime.datetime.now(tz=OSLO_TZ)
     today = now.date()
+    tomorrow = today + datetime.timedelta(days=1)
     evs = parse_events(events)
+    # Today's birthdays get the season field; tomorrow's a balloon by "I morgen"; later ones are left out
+    birthdays = [e['name'] for e in evs if e['birthday'] and e['first'] == today]
+    evs = [e for e in evs if not e['birthday'] or e['first'] == tomorrow]
     # Seed by date so the hand-drawn wobble stays put between refreshes in a day (no ghosting)
     sk = Sketch(W, H, seed=today.toordinal())
 
@@ -467,7 +523,10 @@ def render_image(events, weather, now=None):
     _draw_agenda(sk, evs, today)
     sk.stroke([(509, TOP - 22), (509.5, 280), (510, 458)], width=1.6, amp=1.2)  # column divider
     _draw_weather(sk, weather.get('hours', []), now)
-    _draw_season(sk, today)
+    if birthdays:
+        _draw_birthday(sk, birthdays)
+    else:
+        _draw_season(sk, today)
 
     buf = io.BytesIO()
     sk.flatten().save(buf, 'PNG')
