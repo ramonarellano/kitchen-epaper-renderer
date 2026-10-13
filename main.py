@@ -58,72 +58,6 @@ EVENT_ICONS = [
     (re.compile(r'\bfly\b|flyplass|gardermoen|reise', re.I), plane_icon),
 ]
 
-# Short titles: explicit overrides first, otherwise cut at the first of these words
-SHORT_TITLES = {
-    'levere i barnehagen': 'Barnehagen',
-}
-TITLE_CUT = re.compile(r'\s+(?:–|-|med|hos|i|på)\s+', re.I)
-
-def load_credentials():
-    client = secretmanager.SecretManagerServiceClient()
-    name = f"{SECRET_NAME}/versions/latest"
-    payload = client.access_secret_version(name=name).payload.data.decode()
-    info = json.loads(payload)
-    return service_account.Credentials.from_service_account_info(
-        info,
-        scopes=['https://www.googleapis.com/auth/calendar.readonly']
-    )
-
-def get_events():
-    creds   = load_credentials()
-    service = build('calendar','v3',credentials=creds)
-    now     = datetime.datetime.utcnow()
-    # Fetch up to 14 days ahead to ensure enough events to fill the image
-    then    = now + datetime.timedelta(days=14)
-    items   = service.events().list(
-        calendarId=CALENDAR_ID,
-        timeMin=now.isoformat()+'Z',
-        timeMax=then.isoformat()+'Z',
-        singleEvents=True,
-        orderBy='startTime'
-    ).execute().get('items',[])
-    # Return as list of (date-str, start, end, summary)
-    events = []
-    for evt in items:
-        start = evt['start'].get('dateTime', evt['start'].get('date'))
-        end = evt['end'].get('dateTime', evt['end'].get('date'))
-        date = start[:10]
-        summary = evt.get('summary','(No title)')
-        events.append((date, start, end, summary))
-    return events
-
-def get_weather():
-    """Hourly forecast for today and tomorrow (Oslo time) plus the current conditions."""
-    url = f'https://api.met.no/weatherapi/locationforecast/2.0/compact?lat={YR_LAT}&lon={YR_LON}'
-    headers = {'User-Agent':'kitchen-epaper/1.0'}
-    data = requests.get(url, headers=headers).json()
-    now = datetime.datetime.now(tz=OSLO_TZ)
-    days = (now.date(), now.date() + datetime.timedelta(days=1))
-    hours = []
-    for ts in data['properties']['timeseries']:
-        t = datetime.datetime.fromisoformat(ts['time'].replace('Z','+00:00')).astimezone(OSLO_TZ)
-        if t.date() not in days:
-            continue
-        details = ts['data']['instant']['details']
-        nxt = ts['data'].get('next_1_hours') or ts['data'].get('next_6_hours') or {}
-        hours.append({
-            'time': t,
-            'date': t.date(),
-            'hour': t.hour,
-            'temp': details['air_temperature'],
-            'wind': details.get('wind_speed', 0),
-            'precip': nxt.get('details', {}).get('precipitation_amount', 0),
-            'icon': nxt.get('summary', {}).get('symbol_code'),
-        })
-    # The first timeseries entry is the current hour
-    current = next((h for h in hours if h['time'] > now - datetime.timedelta(hours=1)), hours[0] if hours else None)
-    return {'now': current, 'hours': hours}
-
 W, H = 800, 480
 LX, LW = 26, 496      # left column (agenda)
 RX, RE = 522, 776     # right column (weather + season)
@@ -131,21 +65,8 @@ ROW = 34              # agenda row height
 BOTTOM = 452          # lowest agenda baseline
 
 
-def short_title(title):
-    """One or two words: 'Øvelseskjøring med Solveig' -> 'Øvelseskjøring'."""
-    title = title.strip()
-    override = SHORT_TITLES.get(title.lower())
-    if override:
-        return override
-    return TITLE_CUT.split(title, maxsplit=1)[0].strip(' ,.:;') or title
-
-
 def fit(text, font, max_w):
-    """Drop whole words until text fits; '…' only as a last resort."""
-    words = text.split()
-    while len(words) > 1 and font.width(' '.join(words)) > max_w:
-        words.pop()
-    text = ' '.join(words)
+    """Full text if it fits, otherwise cut with '…' at the end."""
     if font.width(text) <= max_w:
         return text
     while text and font.width(text + '…') > max_w:
@@ -154,7 +75,7 @@ def fit(text, font, max_w):
 
 
 def parse_events(events):
-    """Calendar tuples -> dicts with Oslo-local first/last day, start time (None if all-day), people and short title."""
+    """Calendar tuples -> dicts with Oslo-local first/last day, start time (None if all-day), people and title."""
     out = []
     for _date, start, end, summary in events:
         summary = summary.strip()
@@ -177,7 +98,7 @@ def parse_events(events):
             continue
         icon = next((fn for rx, fn in EVENT_ICONS if rx.search(summary)), star_icon)
         out.append({'first': first, 'last': max(first, last), 'start': st, 'who': who,
-                    'title': short_title(title), 'icon': icon})
+                    'title': title.strip(), 'icon': icon})
     out.sort(key=lambda e: (e['first'], e['start'] is not None, e['start'] or 0))
     return out
 

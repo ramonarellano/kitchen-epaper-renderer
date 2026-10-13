@@ -104,7 +104,7 @@ Layout follows `docs/DESIGN-kjokkentavle.md` (v5); `docs/kjokkentavle-konsept.ht
   All text is at least 22 px so it can be read from across the kitchen.
 - **Header:** date, icons for today's all-day events/holiday, and current weather (icon + temperature)
 - **Left:** today's timed events (max 3, no title), "I morgen" with all-day icons and max 3 events ("+N til" for the rest),
-  then up to 3 later days on one line each ("+N" for more). Titles are shortened to one or two words (`short_title`).
+  then up to 3 later days on one line each ("+N" for more). Titles are shown in full and only cut with «…» when they would not fit.
   Title prefixes with initials (`S: Piano`, `K&R&E: …`) become coloured rings per person (see `PEOPLE` in `main.py`);
   all-day events get an icon instead of a row (søppel, tannlege, fly, otherwise a star)
 - **Right:** "Været i morgen" at 08, 12, 16 and 20 — icon, temperature, wind (m/s) and precipitation (mm, only when wet)

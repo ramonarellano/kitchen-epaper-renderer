@@ -9,7 +9,7 @@ Kjøkkentavla er en håndtegnet familietavle for **Waveshare 7.3" 7-farge e-papi
 ## 1. Prinsipper
 
 - **Lesbart fra andre siden av kjøkkenet.** All tekst er minst 22 px. Tidspunkt for siste oppdatering vises ikke.
-- **Lite tekst.** Hendelser vises med korte titler på ett til to ord. Det som ikke får plass, telles som «+N» i stedet for å vises.
+- **Lite tekst.** Hendelser som ikke får plass, telles som «+N» i stedet for å vises.
 - Teksten er alltid svart på hvitt. Farger brukes bare på figurer, personmerker og markeringer.
 - Tegningene har et fast felt som alltid er ledig.
 
@@ -75,7 +75,7 @@ Radhøyden er 34 px.
 3. Stiplet håndtegnet skillestrek.
 4. **Senere.** Maks **3 dager**, én linje per dag: ukedag (25, fet) + første hendelse (28). Flere hendelser gir «+N» høyrejustert. Dager som ikke får plass før y≈452, utelates.
 
-**Hendelsesrad:** `HH:MM` (fet) → personmerker → kort tittel. Bare starttid vises.
+**Hendelsesrad:** `HH:MM` (fet) → personmerker → tittel. Bare starttid vises.
 
 **Hele dagen-hendelser** (søppeltømming, reiser, merkedager) får ingen egen rad. De vises som ikon: for i dag etter datoen i hodet, for i morgen etter «I morgen».
 
@@ -98,15 +98,9 @@ Radhøyden er 34 px.
 - **Nedtelling:** ikon + «NN dager» (34, fet) og under det «til <høytid>» (22).
 - **Scene:** sesongfigurer på en håndtegnet bakkelinje på y≈452, med noen få dekorfigurer i luften. Figurene må ikke overlappe teksten.
 
-## 5. Korte titler
+## 5. Titler
 
-Kalendertitler gjøres om til korte titler på ett til to ord og maks ca. 16 tegn. Bredden på venstre kolonne gir plass til omtrent 15–16 tegn etter klokkeslett og merke.
-
-Foreslått rekkefølge:
-1. Bruk et eget felt for kort tittel hvis kalenderen har det, eller en ordliste/overstyring (`"Levere i barnehagen" → "Barnehagen"`).
-2. Fjern personprefiks (`K:`, `S:`) og gjør dem om til merker.
-3. Kutt etter « – », « - », « med », « hos », « i », « på », for eksempel «Øvelseskjøring med Solveig» → «Øvelseskjøring».
-4. Kutt ved ordgrense til det passer. Bruk «…» bare som siste utvei.
+Kalendertitler vises i sin helhet. Bare personprefiks (`K:`, `S:`) fjernes og gjøres om til merker. En tittel kortes bare hvis den ellers ville gått forbi kolonnen, og da kuttes den med «…» på slutten.
 
 ## 6. Ikoner og figurer
 
