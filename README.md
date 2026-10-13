@@ -114,6 +114,13 @@ Layout follows `docs/DESIGN-kjokkentavle.md` (v5); `docs/kjokkentavle-konsept.ht
 
 ---
 
+## Testing and deploying
+- Run the tests: `python -m unittest discover -s tests -v` (only Secret Manager, Calendar and met.no are faked)
+- Deploy with `./deploy.sh`: runs the tests, deploys only if they pass, then checks that the live
+  `?format=raw` returns a 192000-byte frame
+
+---
+
 ## Endpoint Usage
 - `/epaper?format=png` — PNG image (default)
 - `/epaper?format=jpeg` — JPEG image

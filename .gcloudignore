@@ -16,3 +16,6 @@
 node_modules
 #!include:.gitignore
 docs
+tests
+deploy.sh
+CLAUDE.md

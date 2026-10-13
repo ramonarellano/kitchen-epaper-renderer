@@ -45,11 +45,11 @@ WEEKDAYS_SHORT = ['man', 'tir', 'ons', 'tor', 'fre', 'lør', 'søn']
 MONTHS = ['januar', 'februar', 'mars', 'april', 'mai', 'juni', 'juli',
           'august', 'september', 'oktober', 'november', 'desember']
 
-# Family members: an event title prefixed with initials ("S: Piano", "K&R&E: Høsttreff")
+# Family members: an event title prefixed with initials ("S: Piano", "K&R&E: Høsttreff", "R og S: Tusenfryd")
 # gets a coloured ring per person instead of the prefix.
 PEOPLE = {'K': RED, 'S': BLUE, 'R': GREEN, 'E': ORANGE, 'M': YELLOW}
 _P = ''.join(PEOPLE)
-PEOPLE_PREFIX = re.compile(rf'^([{_P}](?:\s*[&+,/]\s*[{_P}])*)(?::\s*|\s+)(\S.*)$')
+PEOPLE_PREFIX = re.compile(rf'^([{_P}](?:(?:\s*[&+,/]\s*|\s+og\s+)[{_P}])*)(?::\s*|\s+)(\S.*)$')
 
 # Keyword -> icon for all-day events (shown after the date / "I morgen" instead of a row)
 EVENT_ICONS = [
