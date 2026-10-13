@@ -158,28 +158,91 @@ class RenderAcrossTheYearTest(unittest.TestCase):
         self.assertEqual(Image.open(io.BytesIO(png)).size, (800, 480))
 
 
-class PeoplePrefixTest(unittest.TestCase):
+class ShortTitleTest(unittest.TestCase):
+    """Calendar title -> (people, short title), spec §4.3 and §5."""
     CASES = {
         'S: piano Ekeberg': ('S', 'piano Ekeberg'),
-        'K Øvelseskjøring med Solveig': ('K', 'Øvelseskjøring med Solveig'),
+        'K Øvelseskjøring': ('K', 'Øvelseskjøring'),
         'K&R&E: 9A1 Høsttreff': ('KRE', '9A1 Høsttreff'),
         'R og S:Tusenfryd': ('RS', 'Tusenfryd'),
         'R og S og E: Kino': ('RSE', 'Kino'),
-        'K, M: Middag': ('KM', 'Middag'),
-        'E6 stengt': (None, None),
-        'Tannlege': (None, None),
+        'Fotballtrening Emilie': ('E', 'Fotballtrening'),
+        'K: Øvelseskjøring med Solveig': ('KS', 'Øvelseskjøring'),
+        'Luciatog Solveig og Emilie': ('SE', 'Luciatog'),
+        'Ramon og Solveig: Tidlig tog': ('RS', 'Tidlig tog'),
+        'Middag hos Solveig': ('S', 'Middag'),
+        'Middag hos Maria': ('', 'Middag hos Maria'),
+        'Foreldremøte – klasse 9A': ('', 'Foreldremøte'),
+        'Levere i barnehagen': ('', 'Barnehagen'),
+        'E6 stengt': ('', 'E6 stengt'),
+        'Karis bursdag': ('', 'Karis bursdag'),
     }
 
     def test_cases(self):
-        for title, (who, rest) in self.CASES.items():
+        for title, expected in self.CASES.items():
             with self.subTest(title=title):
-                m = main.PEOPLE_PREFIX.match(title)
-                if who is None:
-                    self.assertIsNone(m)
-                else:
-                    self.assertIsNotNone(m)
-                    self.assertEqual(''.join(c for c in m.group(1) if c.isupper()), who)
-                    self.assertEqual(m.group(2), rest)
+                self.assertEqual(main.short_title(title), expected)
+
+    def test_fit_words_does_not_end_on_little_word(self):
+        cut = main.fit_words('Lunsj med kolleger fra jobben i byen', main.font_title, 300)
+        self.assertFalse(cut.split()[-1] in main.DANGLING, cut)
+
+
+class AgendaLayoutTest(unittest.TestCase):
+    """Spec §4.2: today and tomorrow always complete, later days whole or not at all, nothing below y=452."""
+    NOW = main.OSLO_TZ.localize(datetime.datetime(2026, 10, 12, 7, 30))
+
+    def agenda(self, events):
+        sk = main.Sketch(main.W, main.H, seed=1)
+        return main._draw_agenda(sk, main.parse_events(events), self.NOW.date())
+
+    @staticmethod
+    def timed(day_offset, hm, title, minutes=60):
+        hour, minute = (int(v) for v in hm.split(':'))
+        st = datetime.datetime(2026, 10, 12 + day_offset, hour, minute)
+        et = st + datetime.timedelta(minutes=minutes)
+        return (st.date().isoformat(), st.strftime('%Y-%m-%dT%H:%M:00+02:00'), et.strftime('%Y-%m-%dT%H:%M:00+02:00'), title)
+
+    @staticmethod
+    def allday(day_offset, title, days=1):
+        d = datetime.date(2026, 10, 12) + datetime.timedelta(days=day_offset)
+        return (d.isoformat(), d.isoformat(), (d + datetime.timedelta(days=days)).isoformat(), title)
+
+    def test_ongoing_count(self):
+        for n in (0, 1, 2):
+            with self.subTest(ongoing=n):
+                events = [self.allday(-1, f'Reise {i}', 4) for i in range(n)] + [self.timed(0, '08:30', 'Barnehagen')]
+                self.assertEqual(self.agenda(events)['ongoing'], n)
+
+    def test_busy_tomorrow_is_complete_and_later_days_dropped(self):
+        events = [self.timed(0, '08:30', 'Barnehagen'), self.timed(0, '17:00', 'Fotball')]
+        events += [self.timed(1, f'{8 + i}:00', f'Avtale {i}') for i in range(6)]
+        events += [self.timed(2, '10:00', 'Tannlege'), self.timed(3, '10:00', 'Lunsj')]
+        shown = self.agenda(events)
+        self.assertEqual((shown['today'], shown['tomorrow']), (2, 6))
+        self.assertLessEqual(shown['last_baseline'], main.BOTTOM)
+
+    def test_very_busy_days_still_complete(self):
+        events = [self.allday(-1, 'Reise', 4), self.allday(-1, 'Kari i Bergen', 4)]
+        events += [self.timed(0, f'{7 + i}:00', f'I dag {i}') for i in range(5)]
+        events += [self.timed(1, f'{7 + i}:00', f'I morgen {i}') for i in range(7)]
+        shown = self.agenda(events)
+        self.assertEqual((shown['today'], shown['tomorrow']), (5, 7))
+        self.assertTrue(shown['compact_tomorrow'])
+        self.assertLessEqual(shown['last_baseline'], main.BOTTOM)
+
+    def test_later_day_whole_or_not_at_all(self):
+        events = [self.timed(0, '08:30', 'Barnehagen'), self.timed(1, '18:30', 'Skvåsj')]
+        events += [self.timed(2, '10:00', 'Tannlege')]
+        events += [self.timed(3, f'{8 + i}:00', f'Langt navn på avtale nummer {i}') for i in range(12)]
+        shown = self.agenda(events)
+        self.assertEqual(shown['later_days'], 1)  # the long day does not fit and is dropped entirely
+        self.assertLessEqual(shown['last_baseline'], main.BOTTOM)
+
+    def test_same_data_gives_identical_image(self):
+        events = [self.timed(0, '08:30', 'Barnehagen'), self.allday(1, 'Søppeltømming')]
+        weather = {'now': None, 'hours': []}
+        self.assertEqual(main.render_image(events, weather, now=self.NOW), main.render_image(events, weather, now=self.NOW))
 
 
 if __name__ == '__main__':

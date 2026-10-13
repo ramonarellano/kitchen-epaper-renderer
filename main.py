@@ -7,7 +7,7 @@ import logging
 import pytz
 
 from sketch import (Sketch, Font, weather_icon, ellipse_pts, bin_icon, tooth_icon, plane_icon, star_icon,
-                    wind_icon, drop_icon, RED, BLUE, GREEN, ORANGE, YELLOW)
+                    wind_icon, drop_icon, RED, BLUE, GREEN, ORANGE)
 from seasonal import scene, special_days, next_countdown
 
 # env vars (set these when deploying)
@@ -31,13 +31,16 @@ font_now_temp = Font(KALAM_BOLD, 40)     # current temperature
 font_date     = Font(KALAM_BOLD, 36)     # header date
 font_countdown = Font(KALAM_BOLD, 34)    # "19 dager"
 font_wx_temp  = Font(KALAM_BOLD, 30)     # temperature in the weather cells
-font_title    = Font(KALAM_REGULAR, 29)  # event titles
+font_title    = Font(KALAM_REGULAR, 29)  # event titles today / tomorrow
+font_later    = Font(KALAM_REGULAR, 27)  # comma-separated events on later days
+font_ongoing  = Font(KALAM_REGULAR, 26)  # ongoing multi-day events
 font_section  = Font(KALAM_BOLD, 28)     # "I morgen"
 font_time     = Font(KALAM_BOLD, 26)     # event start time / weekday
-font_wx_head  = Font(KALAM_BOLD, 24)     # "Været i morgen"
+font_wx_head  = Font(KALAM_BOLD, 24)     # "Været i dag"
 font_small    = Font(KALAM_REGULAR, 22)  # wind, "til Halloween"
-font_small_b  = Font(KALAM_BOLD, 22)     # weather cell hours, precipitation, "+N til"
+font_small_b  = Font(KALAM_BOLD, 22)     # weather cell hours, precipitation
 font_badge    = Font(KALAM_BOLD, 21)     # person initials
+font_badge_s  = Font(KALAM_BOLD, 18)     # person initials on later days
 
 # Norwegian names, independent of which locales the runtime has installed
 WEEKDAYS = ['mandag', 'tirsdag', 'onsdag', 'torsdag', 'fredag', 'lørdag', 'søndag']
@@ -45,11 +48,23 @@ WEEKDAYS_SHORT = ['man', 'tir', 'ons', 'tor', 'fre', 'lør', 'søn']
 MONTHS = ['januar', 'februar', 'mars', 'april', 'mai', 'juni', 'juli',
           'august', 'september', 'oktober', 'november', 'desember']
 
-# Family members: an event title prefixed with initials ("S: Piano", "K&R&E: Høsttreff", "R og S: Tusenfryd")
-# gets a coloured ring per person instead of the prefix.
-PEOPLE = {'K': RED, 'S': BLUE, 'R': GREEN, 'E': ORANGE, 'M': YELLOW}
+# Family members become coloured rings with their initial instead of text.
+# Sources: an initials prefix ("S: Piano", "K&R&E: Høsttreff", "R og S: Tusenfryd")
+# and first names anywhere in the title ("Fotballtrening Emilie", "Øvelseskjøring med Solveig").
+PEOPLE = {'K': RED, 'S': BLUE, 'R': GREEN, 'E': ORANGE}
+NAMES = {'Kari': 'K', 'Ramon': 'R', 'Solveig': 'S', 'Emilie': 'E'}
 _P = ''.join(PEOPLE)
 PEOPLE_PREFIX = re.compile(rf'^([{_P}](?:(?:\s*[&+,/]\s*|\s+og\s+)[{_P}])*)(?::\s*|\s+)(\S.*)$')
+# A name, together with a preceding "med", "hos" or "og"
+NAME_PATTERNS = [(re.compile(rf'\s*(?:\b(?:med|hos|og)\s+)?\b{name}\b'), letter) for name, letter in NAMES.items()]
+
+# Calendar title -> short display title (lower-case keys)
+# Words a shortened title should not end on
+DANGLING = {'i', 'på', 'med', 'og', 'om', 'til', 'fra', 'for', 'hos', 'av', 'en', 'et', 'ei', 'the'}
+
+SHORT_TITLES = {
+    'levere i barnehagen': 'Barnehagen',
+}
 
 # Keyword -> icon for all-day events (shown after the date / "I morgen" instead of a row)
 EVENT_ICONS = [
@@ -61,7 +76,8 @@ EVENT_ICONS = [
 W, H = 800, 480
 LX, LW = 26, 496      # left column (agenda)
 RX, RE = 522, 776     # right column (weather + season)
-ROW = 34              # agenda row height
+ROW = 33              # agenda row height (today, tomorrow, ongoing)
+LROW = 32             # line height for later days
 BOTTOM = 452          # lowest agenda baseline
 
 
@@ -135,15 +151,42 @@ def fit(text, font, max_w):
     return text.rstrip() + '…'
 
 
+def fit_words(text, font, max_w):
+    """Drop whole words from the end until the text fits; '…' only if a single word is still too long."""
+    words = text.split()
+    if font.width(text) <= max_w:
+        return text
+    while len(words) > 1 and font.width(' '.join(words)) > max_w:
+        words.pop()
+    # Don't end on a dangling little word ("Lunsj med kolleger fra jobben i")
+    while len(words) > 1 and words[-1].lower() in DANGLING:
+        words.pop()
+    return fit(' '.join(words), font, max_w)
+
+
+def short_title(summary):
+    """Calendar title -> (people initials, short title)."""
+    title = summary.strip()
+    title = SHORT_TITLES.get(title.lower(), title)
+    who = ''
+    m = PEOPLE_PREFIX.match(title)
+    if m:
+        who, title = re.sub(r'[^A-Z]', '', m.group(1)), m.group(2)
+    for rx, letter in NAME_PATTERNS:
+        if rx.search(title):
+            title = rx.sub('', title)
+            if letter not in who:
+                who += letter
+    title = re.split(r'\s+[–-]\s+', title, maxsplit=1)[0]
+    # Leftovers after removing names: "Ramon og Solveig: Tog" -> ": Tog"
+    return who, re.sub(r'\s{2,}', ' ', title).strip(' :,&+/–-')
+
+
 def parse_events(events):
     """Calendar tuples -> dicts with Oslo-local first/last day, start time (None if all-day), people and title."""
     out = []
     for _date, start, end, summary in events:
-        summary = summary.strip()
-        who, title = '', summary
-        m = PEOPLE_PREFIX.match(summary)
-        if m:
-            who, title = re.sub(r'[^A-Z]', '', m.group(1)), m.group(2)
+        who, title = short_title(summary)
         try:
             if len(start) == 10:
                 # All-day events have date-only start/end ('YYYY-MM-DD'); end is exclusive
@@ -159,19 +202,24 @@ def parse_events(events):
             continue
         icon = next((fn for rx, fn in EVENT_ICONS if rx.search(summary)), star_icon)
         out.append({'first': first, 'last': max(first, last), 'start': st, 'who': who,
-                    'title': title.strip(), 'icon': icon})
+                    'title': title, 'icon': icon})
     out.sort(key=lambda e: (e['first'], e['start'] is not None, e['start'] or 0))
     return out
 
 
-def day_rows(evs, d):
-    """Timed events starting on d."""
-    return [e for e in evs if e['start'] is not None and e['first'] == d]
+def is_ongoing(e, today):
+    """Multi-day events that have started and last through today, or start today and last longer."""
+    return e['first'] <= today <= e['last'] and (e['first'] < today or e['last'] > e['first'])
 
 
-def day_icons(evs, d, limit=3):
-    """Icons for all-day events (and timed events that started earlier) covering d, plus the day's holiday icon."""
-    icons = [e['icon'] for e in evs if e['first'] <= d <= e['last'] and (e['start'] is None or e['first'] < d)]
+def day_rows(evs, d, today):
+    """Timed events starting on d (except those shown among the ongoing ones)."""
+    return [e for e in evs if e['start'] is not None and e['first'] == d and not is_ongoing(e, today)]
+
+
+def day_icons(evs, d, today, limit=3):
+    """Icons for all-day events starting on d (not ongoing ones), plus the day's holiday icon."""
+    icons = [e['icon'] for e in evs if e['start'] is None and e['first'] == d and not is_ongoing(e, today)]
     icons += [icon for day, _, icon, _ in special_days(d.year) if day == d and icon]
     unique = []
     for ic in icons:
@@ -180,22 +228,50 @@ def day_icons(evs, d, limit=3):
     return unique[:limit]
 
 
-def _badges(sk, x, y, who):
-    """Coloured rings with the initial inside; returns the width used."""
+def _badges(sk, x, y, who, scale=1.0):
+    """Coloured rings with the initial inside, baseline y; returns the width used."""
+    d, step = 29 * scale, 31 * scale
+    font = font_badge if scale >= 1 else font_badge_s
     for i, letter in enumerate(who):
-        cx = x + 14 + i * 31
-        sk.stroke(ellipse_pts(cx, y - 9, 14.5, 14.5, n=28, start=sk.rng.uniform(0, 6)),
+        cx = x + d / 2 + i * step
+        sk.stroke(ellipse_pts(cx, y - 9 * scale, d / 2, d / 2, n=28, start=sk.rng.uniform(0, 6)),
                   width=3.2, amp=0.3, closed=True, color=PEOPLE.get(letter))
-        sk.text((cx, y - 1), letter, font_badge, anchor='ms')
-    return len(who) * 31 + 8 if who else 0
+        sk.text((cx, y - 1 * scale), letter, font, anchor='ms')
+    return len(who) * step + 6 * scale if who else 0
+
+
+def _badges_width(who, scale=1.0):
+    return len(who) * 31 * scale + 6 * scale if who else 0
 
 
 def _row(sk, x, y, ev):
     """HH:MM, person rings, short title; baseline y."""
     sk.text((x, y), ev['start'].strftime('%H:%M'), font_time)
-    cx = x + 76
+    cx = x + 80
     cx += _badges(sk, cx, y, ev['who'])
-    sk.text((cx, y), fit(ev['title'], font_title, LW - cx), font_title)
+    sk.text((cx, y), fit_words(ev['title'], font_title, LW - cx), font_title)
+
+
+def _wrap(items, x0, x1, font, scale=0.85):
+    """Lay out 'A, (K) B, C' with line breaks between items: list of lines of (item, text, x)."""
+    lines, cx = [[]], x0
+    for i, it in enumerate(items):
+        txt = it['title'] + (',' if i < len(items) - 1 else '')
+        w = _badges_width(it['who'], scale) + font.width(txt) + 10
+        if cx + w > x1 and cx > x0:
+            lines.append([])
+            cx = x0
+        lines[-1].append((it, txt, cx))
+        cx += w
+    return lines
+
+
+def _draw_wrapped(sk, lines, y, font, line_h, x1, scale=0.85):
+    for li, line in enumerate(lines):
+        yy = y + li * line_h
+        for it, txt, x in line:
+            cx = x + _badges(sk, x, yy, it['who'], scale)
+            sk.text((cx, yy), fit(txt, font, x1 - cx), font)
 
 
 def _icons(sk, x, y, icons, size=32):
@@ -223,47 +299,91 @@ def _draw_now(sk, current):
     weather_icon(sk, current['icon'], RE - 4 - font_now_temp.width(temp) - 54, 16, 46)
 
 
+def _until(d):
+    return f"til {d.day}/{d.month}"
+
+
 def _draw_agenda(sk, evs, today):
+    """Draw the agenda column; returns what was shown (for tests): counts and the lowest baseline."""
     tomorrow = today + datetime.timedelta(days=1)
+    ongoing = [e for e in evs if is_ongoing(e, today)]
+    today_rows = day_rows(evs, today, today)
+    tom_rows = day_rows(evs, tomorrow, today)
 
-    # Today: no title, it goes without saying
+    # Today and tomorrow are always shown in full. When they don't fit: tighter rows, then tomorrow
+    # listed compactly ("18:30 Øvelseskjøring, 19:00 Piano") like the later days, then today as well.
+    def timed_items(rows):
+        return [dict(ev, title=f"{ev['start'].strftime('%H:%M')} {ev['title']}") for ev in rows]
+
+    def block_height(rows, row, compact):
+        if compact:
+            return len(_wrap(timed_items(rows), LX + 6, LW, font_later)) * LROW
+        return len(rows) * row
+
+    def layout_end(row, compact_today, compact_tom):
+        y = 108 + (len(ongoing) * row + 10 if ongoing else 0)
+        y += block_height(today_rows, row, compact_today) + 6
+        return y + row + 2 + block_height(tom_rows, row, compact_tom) - (LROW if compact_tom else row)
+
+    for row, compact_today, compact_tomorrow in ((ROW, False, False), (30, False, False),
+                                                  (30, False, True), (30, True, True)):
+        if layout_end(row, compact_today, compact_tomorrow) <= BOTTOM:
+            break
+
+    def draw_block(rows, y, compact):
+        if compact:
+            lines = _wrap(timed_items(rows), LX + 6, LW, font_later)
+            lines = lines[:max(1, (BOTTOM - y) // LROW + 1)]  # never draw past the bottom
+            _draw_wrapped(sk, lines, y, font_later, LROW, LW)
+            return y + len(lines) * LROW, y + (len(lines) - 1) * LROW
+        for ev in rows:
+            _row(sk, LX + 6, y, ev)
+            y += row
+        return y, y - row
+
     y = 108
-    for ev in day_rows(evs, today)[:3]:
-        _row(sk, LX + 6, y, ev)
-        y += ROW
-    y += 8
+    if ongoing:
+        sk.rect(LX, y - 27, LW, y - 27 + len(ongoing) * row + 6, width=1.8, amp=0.8)
+        for e in ongoing:
+            cx = LX + 10 + _badges(sk, LX + 10, y, e['who'])
+            until = _until(e['last'])
+            uw = font_time.width(until)
+            box = sk.text((cx, y), fit_words(e['title'], font_ongoing, LW - cx - uw - 16), font_ongoing)
+            sk.text((box[2] + 8 if e['title'] else cx, y), until, font_time)
+            y += row
+        y += 10
 
-    # Tomorrow: title with all-day icons, max 3 rows, the rest counted
-    rows = day_rows(evs, tomorrow)
+    y, last = draw_block(today_rows, y, compact_today)
+    y += 6
+
     label = sk.text((LX + 8, y), "I morgen", font_section)
-    _icons(sk, label[2] + 10, y - 27, day_icons(evs, tomorrow))
-    if len(rows) > 3:
-        sk.text((LW, y), f"+{len(rows) - 3} til", font_small_b, anchor='rs')
-    y += ROW + 2
-    for ev in rows[:3]:
-        _row(sk, LX + 6, y, ev)
-        y += ROW
-    y += 4
-    sk.dashed((LX + 4, y - 22), (LW, y - 21), dash=8, gap=7, width=1.8, amp=0.6)
-    y += 10
+    _icons(sk, label[2] + 10, y - 27, day_icons(evs, tomorrow, today))
+    last = y
+    y += row + 2
+    if tom_rows:
+        y, last = draw_block(tom_rows, y, compact_tomorrow)
 
-    # Later: one line per day, first event and a count of the rest
+    # Later days (0-3): a day is shown only if all of its events fit
     later = {}
     for e in evs:
         if e['first'] > tomorrow:
             later.setdefault(e['first'], []).append(e)
+    ly, shown = y + 16, 0
     for d, items in sorted(later.items())[:3]:
-        if y > BOTTOM:
+        lines = _wrap(items, LX + 74, LW, font_later)
+        if ly + (len(lines) - 1) * LROW > BOTTOM:
             break
-        dn = WEEKDAYS_SHORT[d.weekday()] if (d - today).days < 7 else f"{d.day}.{d.month}"
-        sk.text((LX + 6, y), dn, font_time)
-        cx = LX + 70
-        extra = f"+{len(items) - 1}" if len(items) > 1 else ''
-        ew = font_small_b.width(extra) + 10 if extra else 0
-        sk.text((cx, y), fit(items[0]['title'], font_title, LW - cx - ew), font_title)
-        if extra:
-            sk.text((LW, y), extra, font_small_b, anchor='rs')
-        y += ROW
+        dn = WEEKDAYS_SHORT[d.weekday()] if (d - today).days < 7 else f"{d.day}/{d.month}"
+        sk.text((LX + 6, ly), dn, font_time)
+        _draw_wrapped(sk, lines, ly, font_later, LROW, LW)
+        last = ly + (len(lines) - 1) * LROW
+        ly += len(lines) * LROW + 2
+        shown += 1
+    if shown:
+        sk.dashed((LX + 4, y - 18), (LW, y - 17), dash=8, gap=7, width=1.8, amp=0.6)
+    return {'ongoing': len(ongoing), 'today': len(today_rows), 'tomorrow': len(tom_rows),
+            'compact_today': compact_today, 'compact_tomorrow': compact_tomorrow,
+            'later_days': shown, 'last_baseline': last}
 
 
 def _wx_at(hours, d, hour):
@@ -276,15 +396,23 @@ def _wx_at(hours, d, hour):
     return h, precip
 
 
-def _draw_weather(sk, hours, tomorrow):
-    sk.text((RX + 4, 108), "Været i morgen", font_wx_head)
+def _draw_weather(sk, hours, now):
+    """Four cells (08, 12, 16, 20) for today; after 20:00 for tomorrow. Past cells show only the hour."""
+    day = now.date()
+    title = "Været i dag"
+    if now.hour > 20:
+        day += datetime.timedelta(days=1)
+        title = "Været i morgen"
+    sk.text((RX + 4, 108), title, font_wx_head)
     cw = (RE - RX) / 4
     for i, hour in enumerate((8, 12, 16, 20)):
-        h, precip = _wx_at(hours, tomorrow, hour)
-        if not h:
-            continue
         cx = RX + cw * i + cw / 2
         sk.text((cx, 138), f"{hour:02d}", font_small_b, anchor='ms')
+        h, precip = _wx_at(hours, day, hour)
+        if not h or abs(h['hour'] - hour) > 1:
+            # No forecast for an hour that has passed
+            sk.line((cx - 10, 190), (cx + 10, 189), width=2.2, amp=0.4)
+            continue
         weather_icon(sk, h['icon'], cx - 21, 144, 42)
         sk.text((cx, 208), _temp(h['temp']), font_wx_temp, anchor='ms')
         wind_icon(sk, cx - 24, 223, 21)
@@ -317,7 +445,6 @@ def _draw_season(sk, today):
 def render_image(events, weather, now=None):
     now = now or datetime.datetime.now(tz=OSLO_TZ)
     today = now.date()
-    tomorrow = today + datetime.timedelta(days=1)
     evs = parse_events(events)
     # Seed by date so the hand-drawn wobble stays put between refreshes in a day (no ghosting)
     sk = Sketch(W, H, seed=today.toordinal())
@@ -325,13 +452,13 @@ def render_image(events, weather, now=None):
     sk.wave_border(11, 11, 789, 469)
 
     hx = _draw_header(sk, today)
-    _icons(sk, hx, 24, day_icons(evs, today))
+    _icons(sk, hx, 24, day_icons(evs, today, today))
     _draw_now(sk, weather.get('now'))
     sk.stroke([(24, 72), (400, 73), (776, 74)], width=2.4, amp=0.8)
 
     _draw_agenda(sk, evs, today)
     sk.stroke([(509, 86), (509.5, 280), (510, 458)], width=1.6, amp=1.2)  # column divider
-    _draw_weather(sk, weather.get('hours', []), tomorrow)
+    _draw_weather(sk, weather.get('hours', []), now)
     _draw_season(sk, today)
 
     buf = io.BytesIO()

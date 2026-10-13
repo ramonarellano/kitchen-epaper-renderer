@@ -1,15 +1,16 @@
-# Kjøkkentavla – designspesifikasjon (v5)
+# Kjøkkentavla – designspesifikasjon (v7)
 
 Kjøkkentavla er en håndtegnet familietavle for **Waveshare 7.3" 7-farge e-papir (7.3F)**, 800 × 480 piksler i liggende format.
 
 - Prototype: `kjokkentavle-konsept.html` (én SVG tegnet med rough.js og skriften Kalam).
 - Forhåndsvisning av panelet: `panel_kvantisering.py`.
-- Referansebilder: `kjokkentavle-v5-host.png` og `kjokkentavle-v5-jul.png`.
+- Referansebilder: `kjokkentavle-v7-host.png` og `kjokkentavle-v7-jul.png`.
 
 ## 1. Prinsipper
 
 - **Lesbart fra andre siden av kjøkkenet.** All tekst er minst 22 px. Tidspunkt for siste oppdatering vises ikke.
-- **Lite tekst.** Hendelser som ikke får plass, telles som «+N» i stedet for å vises.
+- **Lite tekst.** Hendelser vises med korte titler. Familiemedlemmer vises som fargede merker, ikke som navn.
+- **Alle hendelser i dag og i morgen vises alltid.** Antall dager etter i morgen (0–3) tilpasses plassen som er igjen. En dag vises enten med alle hendelser eller ikke i det hele tatt.
 - Teksten er alltid svart på hvitt. Farger brukes bare på figurer, personmerker og markeringer.
 - Tegningene har et fast felt som alltid er ledig.
 
@@ -30,34 +31,36 @@ Kjøkkentavla er en håndtegnet familietavle for **Waveshare 7.3" 7-farge e-papi
 |---|---|---|
 | Temperatur nå | 40 | 700 |
 | Dato | 36 | 700 |
-| Temperatur i værfeltene | 30 | 700 |
 | Nedtelling («19 dager») | 34 | 700 |
+| Temperatur i værfeltene | 30 | 700 |
+| Hendelsestittel (i dag, i morgen) | 29 | 400 |
 | Seksjonstittel («I morgen») | 28 | 700 |
-| Hendelsestittel | 29 | 400 |
-| Klokkeslett og ukedag | 26 | 700 |
-| «Været i morgen» | 24 | 700 |
-| Etiketter (klokkeslett i værfeltene, vind, nedbør, «til Halloween», «+N til») | 22 | 400 / 700 |
-| Bokstav i personmerke | 21 | 700 |
+| Hendelser de neste tre dagene (kommaseparert) | 27 | 400 |
+| Klokkeslett, ukedag og pågående hendelser | 26 | 700 (tittelen på pågående hendelser er 400) |
+| «Været i dag» | 24 | 700 |
+| Etiketter (klokkeslett i værfeltene, vind, nedbør, «til Halloween») | 22 | 400 / 700 |
+| Bokstav i personmerke | 21 (18 på de neste dagene) | 700 |
 
-Tekst brytes aldri over flere linjer. Den kortes med «…» hvis den likevel blir for lang.
+Bare linjene for de neste dagene brytes. All annen tekst kortes med «…» hvis den blir for lang.
 
 ## 4. Oppsett
 
 ```
-┌──────────────────────────────────────────────────────────┐
+┌~.~.~.~.~.~.~.~.~.~.~.~.~.~.~.~.~.~.~.~.~.~.~.~.~.~.~.~.~.~┐
 │ Mandag 12. oktober ★                              ☾ 6°    │  hode y 14–74
 ├────────────────────────────────┬─────────────────────────┤
-│ 08:30  Barnehagen              │ Været i morgen           │
-│ 17:00 (E) Fotball              │  08    12    16    20    │
-│ I morgen 🗑             +1 til │  ☁     ☁     ☁     🌧     │
-│ 18:30 (K) Øvelseskjøring       │  6°    7°    8°    8°    │
-│ 19:00 (S) Piano                │ ≋2    ≋4    ≋5    ≋3     │
-│ 19:00  Foreldremøte            │                   💧2    │
-│ - - - - - - - - - - - - - - -  │ - - - - - - - - - - - -  │
-│ ons  Tannlege                  │ 🎃 19 dager              │
-│ tor  Mariana               +2  │    til Halloween         │
-│ fre  Lunsj                     │   sesongscene            │
-└────────────────────────────────┴─────────────────────────┘
+│ ┌ Maria på sykehuset til 18/10 ┐│ Været i dag              │
+│ 08:30  Barnehagen              │  08    12    16    20    │
+│ 17:00 (E) Fotballtrening       │  ☁     ☀     ☀     ☁     │
+│ I morgen 🗑                    │  4°    8°    9°    6°    │
+│ 18:30 (K)(S) Øvelseskjøring    │ ≋2    ≋3    ≋3    ≋2     │
+│ 19:00 (S) Piano                │ - - - - - - - - - - - -  │
+│ 19:00  Foreldremøte            │ 🎃 19 dager              │
+│ 19:30 (R) Skvåsj               │    til Halloween         │
+│ - - - - - - - - - - - - - - -  │                          │
+│ ons  Tannlege                  │   sesongscene            │
+│ (tor/fre får ikke plass)       │                          │
+└~.~.~.~.~.~.~.~.~.~.~.~.~.~.~.~.~.~.~.~.~.~.~.~.~.~.~.~.~.~┘
    venstre x 26–496              skillestrek x≈510   høyre x 522–776
 ```
 
@@ -68,39 +71,68 @@ Tekst brytes aldri over flere linjer. Den kortes med «…» hvis den likevel bl
 - Håndtegnet strek på y≈73.
 
 ### 4.2 Venstre kolonne: agenda
-Radhøyden er 34 px.
+Radhøyden er 33 px. For linjene de neste dagene er den 32 px.
 
-1. **Dagens hendelser** starter rett under hodet (y=108) **uten tittel**, fordi det er gitt at de gjelder i dag. Maks 3.
-2. **I morgen.** Tittel (28, fet) med eventuelle hele dagen-ikoner etter. Maks **3** hendelser. Flere enn tre gir «+N til», høyrejustert på tittellinjen.
-3. Stiplet håndtegnet skillestrek.
-4. **Senere.** Maks **3 dager**, én linje per dag: ukedag (25, fet) + første hendelse (28). Flere hendelser gir «+N» høyrejustert. Dager som ikke får plass før y≈452, utelates.
+1. **Pågående flerdagshendelser** står øverst i en håndtegnet ramme (strek 1,8), én linje per hendelse. Formatet er personmerker + tittel (26) + **«til D/M»** (26, fet), for eksempel «Maria på sykehuset **til 18/10**» eller «(K) i Bergen **til 15/12**».
+   - En hendelse regnes som pågående når den har startet før i dag og varer ut i dag eller lenger.
+   - Hendelser som starter i dag og varer flere dager, vises også her.
+   - Feltet tegnes ikke når det ikke finnes slike hendelser.
+2. **Dagens hendelser:** **alle**, uten tittel, fordi det er gitt at de gjelder i dag.
+3. **I morgen:** tittel (28, fet) med eventuelle hele dagen-ikoner etter, og deretter **alle** morgendagens hendelser.
+4. Stiplet håndtegnet skillestrek. Den tegnes bare hvis minst én senere dag får plass.
+5. **Dagene etter i morgen** (0–3 dager, i rekkefølge): ukedag (26, fet) og deretter alle dagens hendelser kommaseparert, uten klokkeslett, med personmerker. Linjen brytes mellom hendelser og fortsetter innrykket under.
 
-**Hendelsesrad:** `HH:MM` (fet) → personmerker → tittel. Bare starttid vises.
+**Plassregel:** I dag og i morgen har førsteprioritet og vises alltid komplett. Deretter legges dagene etter i morgen til én om gangen, så lenge **hele** dagen får plass (siste grunnlinje ≤ y≈452). Den første dagen som ikke får plass, og alle etter den, utelates. En dag vises aldri halvveis. Se løkken over `later` i prototypen.
 
-**Hele dagen-hendelser** (søppeltømming, reiser, merkedager) får ingen egen rad. De vises som ikon: for i dag etter datoen i hodet, for i morgen etter «I morgen».
+**Hvis i dag og i morgen alene ikke får plass** (svært travle dager): reduser radhøyden til ca. 30 px, og som siste utvei vis morgendagens hendelser kommaseparert med klokkeslett, i samme format som de senere dagene.
 
-**Personmerker:** håndtegnet sirkel (diameter 29, strek 3,2) i personens farge, med svart forbokstav inni. Flere personer står ved siden av hverandre med 31 px mellomrom.
-- Farger: K rød, S blå, R grønn, E oransje, M gul.
-- Prefiks som «K:» eller «S:» i kalenderteksten fjernes og vises som merke i stedet.
+**Hendelsesrad (i dag og i morgen):** `HH:MM` (fet) → personmerker → kort tittel. Bare starttid vises.
 
-### 4.3 Høyre kolonne: været i morgen
-- Tittelen «Været i morgen» (24, fet) står på y=108.
+**Hele dagen-hendelser** (søppeltømming, merkedager) får ingen egen rad. De vises som ikon: for i dag etter datoen i hodet, for i morgen etter «I morgen». Flerdagshendelser går i feltet for pågående hendelser.
+
+### 4.3 Personmerker
+- Håndtegnet sirkel i personens farge, med svart forbokstav inni.
+- Diameter 29 (strek 3,2) på i dag og i morgen. På de neste dagene er diameteren 25 (skala 0,85).
+- Flere personer står ved siden av hverandre.
+
+| Navn | Merke | Farge |
+|---|---|---|
+| Kari | K | rød |
+| Ramon | R | grønn |
+| Solveig | S | blå |
+| Emilie | E | oransje |
+
+**Fra kalendertekst til merker** (`people()` i prototypen):
+- Prefiks som «K:» eller «S:» blir merker.
+- Navnene ovenfor fjernes fra tittelen og blir merker. Et foranstående «med», «hos» eller «og» fjernes samtidig. Eksempler:
+  - «Fotballtrening Emilie» → (E) Fotballtrening
+  - «K: Øvelseskjøring med Solveig» → (K)(S) Øvelseskjøring
+  - «Luciatog Solveig og Emilie» → (S)(E) Luciatog
+- Andre navn (f.eks. Maria, Mariana) blir stående i teksten.
+
+### 4.4 Høyre kolonne: været i dag
+- Tittelen «Været i dag» (24, fet) står på y=108. Prognosen gjelder **inneværende dag**.
 - **Fire like brede felt** (ca. 63 px): kl. **08, 12, 16 og 20**. Hvert felt har:
   - klokkeslett (22, fet) på y=138
-  - ikon (skala 1,15)
+  - ikon (sky/regn/snø i skala 1,15, sol i skala 0,85 slik at strålene ikke går inn i nabofeltet)
   - temperatur (30, fet) på y=208
   - vind: lite vind-ikon + m/s som tall (22) på y=238
   - nedbør: blå dråpe + mm (22, fet, blå) på y=264, bare når det er nedbør. Avrundes til hele mm, og under 1 mm vises som «<1».
-- Ingen enheter i teksten, fordi ikonene forteller om det er vind eller nedbør.
 - Stiplet skillestrek på y≈276.
 
-### 4.4 Sesongfelt (x 530–776, y 290–462)
+### 4.5 Sesongfelt (x 530–776, y 290–462)
 - **Nedtelling:** ikon + «NN dager» (34, fet) og under det «til <høytid>» (22).
 - **Scene:** sesongfigurer på en håndtegnet bakkelinje på y≈452, med noen få dekorfigurer i luften. Figurene må ikke overlappe teksten.
 
-## 5. Titler
+## 5. Korte titler
 
-Kalendertitler vises i sin helhet. Bare personprefiks (`K:`, `S:`) fjernes og gjøres om til merker. En tittel kortes bare hvis den ellers ville gått forbi kolonnen, og da kuttes den med «…» på slutten.
+Kalendertitler gjøres korte, helst ett til to ord.
+
+Foreslått rekkefølge:
+1. Bruk et eget felt for kort tittel hvis kalenderen har det, eller en ordliste/overstyring (`"Levere i barnehagen" → "Barnehagen"`).
+2. Gjør om familienavn og personprefiks til merker (se 4.3).
+3. Kutt etter « – » og « - ».
+4. Kutt ved ordgrense til det passer. Bruk «…» bare som siste utvei. Dette gjelder ikke de neste dagene, som brytes over flere linjer i stedet.
 
 ## 6. Ikoner og figurer
 
@@ -124,23 +156,37 @@ Forslag til temaer: høst, Halloween, advent/jul, vinter, påske, 17. mai, somme
 
 ## 8. Datamodell (eksempel)
 
+Titlene kan komme rett fra kalenderen. Navn og prefiks gjøres om til merker i rendereren.
+
 ```js
 {
   date: 'Mandag 12. oktober',
   now: { icon: 'moon', temp: '6°' },
+  ongoing: [ { title: 'Maria på sykehuset', until: '18/10' } ],
   todayIcons: [],                      // hele dagen-ikoner, vises etter datoen
-  today: [ { t: '08:30', title: 'Barnehagen' }, { t: '17:00', who: 'E', title: 'Fotball' } ],
+  today: [ { t: '08:30', title: 'Barnehagen' }, { t: '17:00', title: 'Fotballtrening Emilie' } ],
   tomIcons: ['bin'],
-  tomEv: [ { t: '18:30', who: 'K', title: 'Øvelseskjøring' }, /* … */ ],
-  later: [ { dn: 'ons', ev: ['Tannlege'] }, { dn: 'tor', ev: ['Mariana', 'Høsttreff', 'Middag'] } ],
-  wx: [ { k: '08', i: 'cloud', t: '6°', w: 2 }, { k: '12', i: 'cloud', t: '7°', w: 4 },
-        { k: '16', i: 'cloud', t: '8°', w: 5 }, { k: '20', i: 'rain', t: '8°', w: 3, mm: '2' } ]
+  tomEv: [ { t: '18:30', who: 'K', title: 'Øvelseskjøring med Solveig' }, /* … */ ],
+  later: [
+    { dn: 'ons', ev: [ { title: 'Tannlege' } ] },
+    { dn: 'tor', ev: [ { title: 'Mariana' }, { who: 'KRE', title: 'Høsttreff' },
+                       { title: 'Middag hos Solveig' }, { title: 'Yoga Kari' } ] },
+    { dn: 'fre', ev: [ { title: 'Lunsj' } ] }
+  ],
+  wx: [ { k: '08', i: 'cloud', t: '4°', w: 2 }, { k: '12', i: 'sun', t: '8°', w: 3 },
+        { k: '16', i: 'sun', t: '9°', w: 3 }, { k: '20', i: 'cloud', t: '6°', w: 2 } ]
 }
 ```
 
 ## 9. Testsjekkliste
 - Se på panelsimuleringen fra 2–3 meters avstand. All tekst skal være lesbar.
-- Test med 5 eller flere hendelser i morgen (skal gi «+N til»), lange titler, to–tre personmerker på én hendelse, −10° og en dag uten nedbør.
-- Kontroller at ingenting går forbi y≈462 nederst.
+- Test med:
+  - ingen, én og to pågående hendelser
+  - 5–6 hendelser i morgen, slik at senere dager må utelates
+  - mange hendelser på én senere dag, slik at linjen må brytes eller dagen utelates i sin helhet
+  - lange titler
+  - to–tre personmerker på én hendelse
+  - −10° og en dag uten nedbør
+- Kontroller at ingenting går forbi y≈462 nederst, at alle hendelser i dag og i morgen vises, og at ingen senere dag vises halvveis.
 - To gjengivelser med samme data skal gi piksel-identiske bilder.
 - Rotasjonen på 180° skjer bare i sendesteget.

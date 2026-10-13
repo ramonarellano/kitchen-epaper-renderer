@@ -83,24 +83,35 @@ const icon={
   flake(x,y,s=1){const e=g(x,y,s);for(let i=0;i<3;i++){const a=i*Math.PI/3;inG(e,'line',-10*Math.cos(a),-10*Math.sin(a),10*Math.cos(a),10*Math.sin(a),{stroke:C.b,strokeWidth:1.8,roughness:.3,...S()})}}
 };
 
-// ---------- personbadge ----------
-const PEOPLE={K:C.r,S:C.b,R:C.g,E:C.o,M:C.y};
-function badge(x,y,who){
-  who.split('').forEach((l,i)=>{const cx=x+14+i*31;
-    R('circle',cx,y-9,29,{stroke:PEOPLE[l]||C.k,strokeWidth:3.2,roughness:.5,...S()});
-    T(cx,y-1,l,{size:21,w:700,anchor:'middle'})});
-  return who.length*31+8;
+// ---------- personer ----------
+const PEOPLE={K:C.r,S:C.b,R:C.g,E:C.o};
+const NAMES={Kari:'K',Ramon:'R',Solveig:'S',Emilie:'E'};
+// Gjør "Fotballtrening Emilie" -> {who:'E', title:'Fotballtrening'}; "Øvelseskjøring med Solveig" + K -> KS
+function people(title,who=''){
+  for(const [n,l] of Object.entries(NAMES)){
+    const re=new RegExp('\\s*(\\b(med|hos|og)\\s+)?\\b'+n+'\\b','g');
+    if(re.test(title)){title=title.replace(re,'');if(!who.includes(l))who+=l;}
+  }
+  return {who,title:title.replace(/\s{2,}/g,' ').trim()};
 }
+function badge(x,y,who,sz=1){
+  const d=29*sz, step=31*sz;
+  who.split('').forEach((l,i)=>{const cx=x+d/2+i*step;
+    R('circle',cx,y-9*sz,d,{stroke:PEOPLE[l]||C.k,strokeWidth:3.2,roughness:.5,...S()});
+    T(cx,y-1*sz,l,{size:21*sz,w:700,anchor:'middle'})});
+  return who.length*step+6*sz;
+}
+const bw=(who,sz=1)=>who?who.length*31*sz+6*sz:0;
 const measure=(s,o)=>{const t=T(-999,0,s,o);const w=tw(t);t.remove();return w};
 
-// ---------- tegn tavla (v4) ----------
+// ---------- tegn tavla (v6) ----------
 const LX=26, LW=496, RX=522, RE=776;
-const ROW=34, F={title:29,time:26,head:28,date:36,small:22};
+const ROW=33, LROW=32, F={title:29,time:26,head:28,date:36,small:22,later:27};
 function draw(D){
   svg.innerHTML='';seed=7;
   waveBorder(11,11,789,469);
 
-  // hode: dato (+ hele-dagen-ikoner for i dag) og vær nå
+  // hode
   T(28,54,D.date,{size:F.date,w:700});
   let hx=28+measure(D.date,{size:F.date,w:700})+14;
   D.todayIcons.forEach(ic=>{icon[ic](hx,24,1);hx+=40});
@@ -109,45 +120,73 @@ function draw(D){
   icon[D.now.icon](RE-4-nt-50,22,1.2);
   line(24,72,776,74,{strokeWidth:2.4});
 
-  // venstre: i dag (ingen tittel), maks 3
+  const later=D.later.map(d=>({dn:d.dn,items:d.ev.map(e=>people(e.title,e.who||''))}));
+  const ong=D.ongoing||[];
+  const BOTTOM=452;   // siste tillatte grunnlinje
+
   let y=108;
-  D.today.slice(0,3).forEach(ev=>{row(LX+6,y,ev);y+=ROW});
-  y+=8;
-  head(LX,y,'I morgen',D.tomIcons,false,D.tomEv.length>3?`+${D.tomEv.length-3} til`:''); y+=ROW+2;
-  D.tomEv.slice(0,3).forEach(ev=>{row(LX+6,y,ev);y+=ROW});
-  y+=4; line(LX+4,y-22,LW,y-21,{strokeWidth:1.8,roughness:1.2,strokeLineDash:[8,7]}); y+=10;
-  D.later.slice(0,3).forEach(d=>{
-    if(y>452)return;
-    T(LX+6,y,d.dn,{size:F.time,w:700});
-    let cx=LX+70;
-    const extra=d.ev.length>1?`+${d.ev.length-1}`:'';
-    const ew=extra?measure(extra,{size:F.small,w:700})+10:0;
-    T(cx,y,d.ev[0],{size:F.title,max:LW-cx-ew});
-    if(extra)T(LW,y,extra,{size:F.small,w:700,anchor:'end'});
-    y+=ROW;
-  });
+  // pågående flerdagshendelser
+  if(ong.length){
+    R('rectangle',LX,y-27,LW-LX,ong.length*ROW+6,{roughness:1.1,strokeWidth:1.8,...S()});
+    ong.forEach(o=>{const e=people(o.title,o.who||'');let cx=LX+10;
+      if(e.who)cx+=badge(cx,y,e.who);
+      const tt=T(cx,y,e.title,{size:F.time,max:LW-cx-measure(' til '+o.until,{size:F.time,w:700})-8});
+      T(cx+tw(tt)+8,y,'til '+o.until,{size:F.time,w:700});
+      y+=ROW;});
+    y+=10;
+  }
+  // i dag: alle hendelser, ingen tittel
+  D.today.forEach(ev=>{row(LX+6,y,people(ev.title,ev.who||''),ev.t);y+=ROW});
+  y+=6;
+  // i morgen: alle hendelser
+  head(LX,y,'I morgen',D.tomIcons); y+=ROW+2;
+  D.tomEv.forEach(ev=>{row(LX+6,y,people(ev.title,ev.who||''),ev.t);y+=ROW});
+  // senere: bare hele dager som får plass, i rekkefølge
+  const ly0=y+16; let ly=ly0, shown=0;
+  for(const d of later.slice(0,3)){
+    const n=wrapLater(d.items,LX+74,LW,true).length;
+    if(ly+(n-1)*LROW>BOTTOM)break;
+    T(LX+6,ly,d.dn,{size:F.time,w:700});
+    wrapLater(d.items,LX+74,LW,false,ly);
+    ly+=n*LROW+2; shown++;
+  }
+  if(shown)line(LX+4,y-18,LW,y-17,{strokeWidth:1.8,roughness:1.2,strokeLineDash:[8,7]});
 
   line(509,86,510,458,{strokeWidth:1.6,roughness:1.3});
 
-  // høyre: været i morgen, fire felt
-  T(RX+4,108,'Været i morgen',{size:24,w:700});
+  // høyre: været i dag, fire felt
+  T(RX+4,108,'Været i dag',{size:24,w:700});
   const cw=(RE-RX)/4;
   D.wx.forEach((s,i)=>{const cx=RX+cw*i+cw/2;
     T(cx,138,s.k,{size:F.small,w:700,anchor:'middle'});
-    icon[s.i](cx-20,146,1.15);
+    if(s.i==='sun')icon.sun(cx-14,152,.85); else icon[s.i](cx-20,146,1.15);
     T(cx,208,s.t,{size:30,w:700,anchor:'middle'});
     icon.wind(cx-22,222,.6); T(cx+4,238,String(s.w),{size:F.small});
     if(s.mm){icon.drop(cx-19,247,.7); T(cx-2,264,s.mm,{size:F.small,w:700,fill:C.b});}
   });
   line(RX+6,276,RE-4,277,{strokeWidth:1.4,roughness:1.2,strokeLineDash:[8,7]});
-
   D.vignette(RX+8,290,RE-RX-8);
 }
-// ramme: håndtegnet ~.~.~.~ langs alle kanter
+// Legger ut "A, (K) B, C" med linjebryting mellom hendelser. dry=true: bare beregn linjer.
+function wrapLater(items,x0,xmax,dry,y){
+  const sz=.85, fs=F.later; const lines=[[]]; let cx=x0;
+  items.forEach((it,i)=>{
+    const txt=it.title+(i<items.length-1?',':'');
+    const w=bw(it.who,sz)+measure(txt,{size:fs})+10;
+    if(cx+w>xmax&&cx>x0){lines.push([]);cx=x0;}
+    lines[lines.length-1].push({it,txt,x:cx});cx+=w;
+  });
+  if(!dry)lines.forEach((ln,li)=>ln.forEach(({it,txt,x})=>{
+    const yy=y+li*LROW; let cx=x;
+    if(it.who)cx+=badge(cx,yy,it.who,sz);
+    T(cx,yy,txt,{size:fs,max:xmax-cx});
+  }));
+  return lines;
+}
 function waveBorder(x1,y1,x2,y2){
   const edge=(ax,ay,bx,by)=>{
     const L=Math.hypot(bx-ax,by-ay), ux=(bx-ax)/L, uy=(by-ay)/L, nx=-uy, ny=ux;
-    const unit0=34, n=Math.round(L/unit0), unit=L/n, wl=unit-14;
+    const n=Math.round(L/34), unit=L/n, wl=unit-14;
     const P=(d,o)=>[(ax+ux*d+nx*o).toFixed(1),(ay+uy*d+ny*o).toFixed(1)].join(' ');
     for(let i=0;i<n;i++){
       const d=i*unit+7;
@@ -157,17 +196,15 @@ function waveBorder(x1,y1,x2,y2){
   };
   edge(x1,y1,x2,y1);edge(x2,y1,x2,y2);edge(x2,y2,x1,y2);edge(x1,y2,x1,y1);
 }
-function head(x,y,label,icons=[],mark,extra){
+function head(x,y,label,icons=[]){
   const w=measure(label,{size:F.head,w:700});
-  if(mark)line(x+4,y-6,x+16+w,y-8,{stroke:C.y,strokeWidth:12,roughness:.6,bowing:.4});
   T(x+8,y,label,{size:F.head,w:700});
   let cx=x+18+w;
   icons.forEach(ic=>{icon[ic](cx,y-27,1);cx+=40});
-  if(extra)T(LW,y,extra,{size:F.small,w:700,anchor:'end'});
 }
-function row(x,y,ev){
-  T(x,y,ev.t,{size:F.time,w:700});
-  let cx=x+76;
+function row(x,y,ev,t){
+  T(x,y,t,{size:F.time,w:700});
+  let cx=x+80;
   if(ev.who)cx+=badge(cx,y,ev.who);
   T(cx,y,ev.title,{size:F.title,max:LW-cx});
 }
@@ -201,22 +238,26 @@ const WINTER={
 };
 
 const DATA={
- autumn:{...AUTUMN,date:'Mandag 12. oktober',upd:'21:18',
+ autumn:{...AUTUMN,date:'Mandag 12. oktober',
   now:{icon:'moon',temp:'6°'},
+  ongoing:[{title:'Maria på sykehuset',until:'18/10'}],
   todayIcons:[],
-  today:[{t:'08:30',title:'Barnehagen'},{t:'17:00',who:'E',title:'Fotball'}],
+  today:[{t:'08:30',title:'Barnehagen'},{t:'17:00',title:'Fotballtrening Emilie'}],
   tomIcons:['bin'],
-  tomEv:[{t:'18:30',who:'K',title:'Øvelseskjøring'},{t:'19:00',who:'S',title:'Piano'},{t:'19:00',title:'Foreldremøte'},{t:'19:30',who:'R',title:'Skvåsj'}],
-  later:[{dn:'ons',ev:['Tannlege']},{dn:'tor',ev:['Mariana','Høsttreff','Middag']},{dn:'fre',ev:['Lunsj']}],
-  wx:[{k:'08',i:'cloud',t:'6°',w:2},{k:'12',i:'cloud',t:'7°',w:4},{k:'16',i:'cloud',t:'8°',w:5},{k:'20',i:'rain',t:'8°',w:3,mm:'2'}]},
- winter:{...WINTER,date:'Søndag 13. desember',upd:'06:40',
+  tomEv:[{t:'18:30',who:'K',title:'Øvelseskjøring med Solveig'},{t:'19:00',who:'S',title:'Piano'},{t:'19:00',title:'Foreldremøte'},{t:'19:30',who:'R',title:'Skvåsj'}],
+  later:[{dn:'ons',ev:[{title:'Tannlege'}]},
+         {dn:'tor',ev:[{title:'Mariana'},{who:'KRE',title:'Høsttreff'},{title:'Middag hos Solveig'},{title:'Yoga Kari'}]},
+         {dn:'fre',ev:[{title:'Lunsj'}]}],
+  wx:[{k:'08',i:'cloud',t:'4°',w:2},{k:'12',i:'sun',t:'8°',w:3},{k:'16',i:'sun',t:'9°',w:3},{k:'20',i:'cloud',t:'6°',w:2}]},
+ winter:{...WINTER,date:'Søndag 13. desember',
   now:{icon:'snow',temp:'−3°'},
+  ongoing:[{title:'Kari i Bergen',until:'15/12'}],
   todayIcons:['star'],
-  today:[{t:'11:00',who:'SE',title:'Luciatog'},{t:'15:00',title:'Pepperkaker'}],
+  today:[{t:'11:00',title:'Luciatog Solveig og Emilie'},{t:'15:00',title:'Pepperkaker'}],
   tomIcons:['bin'],
-  tomEv:[{t:'17:30',who:'S',title:'Juleavslutning'},{t:'19:30',who:'R',title:'Skvåsj'}],
-  later:[{dn:'tir',ev:['Mariana','Juleavslutning']},{dn:'ons',ev:['Tannlege']},{dn:'tor',ev:['Yoga']}],
-  wx:[{k:'08',i:'cloud',t:'−4°',w:1},{k:'12',i:'snow',t:'−2°',w:3,mm:'1'},{k:'16',i:'snow',t:'−2°',w:2,mm:'<1'},{k:'20',i:'cloud',t:'−4°',w:1}]}
+  tomEv:[{t:'17:30',title:'Juleavslutning piano Solveig'},{t:'19:30',who:'R',title:'Skvåsj'}],
+  later:[{dn:'tir',ev:[{title:'Mariana'},{title:'Juleavslutning Emilie'}]},{dn:'ons',ev:[{title:'Tannlege'}]},{dn:'tor',ev:[{title:'Yoga Kari'}]}],
+  wx:[{k:'08',i:'snow',t:'−3°',w:1,mm:'1'},{k:'12',i:'cloud',t:'−1°',w:2},{k:'16',i:'cloud',t:'−2°',w:2},{k:'20',i:'cloud',t:'−4°',w:1}]}
 };
 const which=(location.hash||'#autumn').slice(1);
 Promise.all(['400 20px Kalam','700 20px Kalam'].map(f=>document.fonts.load(f))).then(()=>{draw(DATA[which]);document.title='ready'});
