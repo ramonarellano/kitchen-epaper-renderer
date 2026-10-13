@@ -8,6 +8,12 @@ The ESP32 fetches `?format=raw` once an hour; if the function errors, the displa
 The design spec is `design/DESIGN-kjokkentavle.md` (with a browser prototype and reference renders in `design/`).
 When you change the layout, update the spec in the same commit; the code is the source of truth if they disagree.
 
+## Shipping changes
+
+Ramon is the only one working in this repo: no branches, pull requests or reviews.
+After every change, ask Ramon whether to ship it. On a yes, do all three without asking again:
+commit to `main`, push `main` to `origin`, and deploy with `./deploy.sh`.
+
 ## Deploying
 
 Always deploy with `./deploy.sh`. Never run `gcloud functions deploy` directly.
