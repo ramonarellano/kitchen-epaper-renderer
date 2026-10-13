@@ -29,8 +29,8 @@ Kjøkkentavla er en håndtegnet familietavle for **Waveshare 7.3" 7-farge e-papi
 
 | Element | px | Vekt |
 |---|---|---|
-| Temperatur nå | 40 | 700 |
-| Dato | 36 | 700 |
+| Temperatur nå | 36 | 700 |
+| Dato | 32 | 700 |
 | Nedtelling («19 dager») | 34 | 700 |
 | Temperatur i værfeltene | 30 | 700 |
 | Hendelsestittel (i dag, i morgen) | 29 | 400 |
@@ -66,9 +66,9 @@ Bare linjene for de neste dagene brytes. All annen tekst kortes med «…» hvis
 
 ### 4.1 Ramme og hode
 - **Ramme: håndtegnet `~.~.~.~`** langs alle fire kanter, fra (11,11) til (789,469). Hver kant deles i like lange enheter på ca. 34 px. Hver enhet er en liten bølge (to kvadratiske kurver med utslag ±6 px, strek 2,2) fulgt av en fylt prikk (diameter 5,5). Antall enheter rundes slik at mønsteret går opp på hver kant. Se `waveBorder()` i prototypen.
-- Datoen står til venstre (36 px, grunnlinje y=54). **Hele dagen-ikoner for i dag** står rett etter datoen.
-- Til høyre står været nå: ikon (skala 1,2) og temperatur (40 px), høyrejustert mot x=772.
-- Håndtegnet strek på y≈73.
+- Datoen står til venstre (32 px, grunnlinje y=47). Hodet er gjort lavere enn i v7, slik at innholdet under starter på y=98. **Hele dagen-ikoner for i dag** står rett etter datoen.
+- Til høyre står været nå: ikon og temperatur (36 px), høyrejustert mot x=772.
+- Håndtegnet strek på y≈63.
 
 ### 4.2 Venstre kolonne: agenda
 Radhøyden er 33 px. For linjene de neste dagene er den 32 px.
@@ -78,7 +78,7 @@ Radhøyden er 33 px. For linjene de neste dagene er den 32 px.
    - Hendelser som starter i dag og varer flere dager, vises også her.
    - Feltet tegnes ikke når det ikke finnes slike hendelser.
 2. **Dagens hendelser:** **alle**, uten tittel, fordi det er gitt at de gjelder i dag.
-3. **I morgen:** tittel (28, fet) med eventuelle hele dagen-ikoner etter, og deretter **alle** morgendagens hendelser.
+3. **I morgen:** tittel (28, fet) med eventuelle hele dagen-ikoner etter, og deretter **alle** morgendagens hendelser. Tittelen utelates når det ikke er noen hendelser i morgen.
 4. Stiplet håndtegnet skillestrek. Den tegnes bare hvis minst én senere dag får plass.
 5. **Dagene etter i morgen** (0–3 dager, i rekkefølge): ukedag (26, fet) og deretter alle dagens hendelser kommaseparert, uten klokkeslett, med personmerker. Linjen brytes mellom hendelser og fortsetter innrykket under.
 
@@ -101,9 +101,10 @@ Radhøyden er 33 px. For linjene de neste dagene er den 32 px.
 | Ramon | R | grønn |
 | Solveig | S | blå |
 | Emilie | E | oransje |
+| Alle (hele familien) | A | svart |
 
 **Fra kalendertekst til merker** (`people()` i prototypen):
-- Prefiks som «K:» eller «S:» blir merker.
+- Prefiks som «K:», «S:», «A:» eller «Alle:» blir merker.
 - Navnene ovenfor fjernes fra tittelen og blir merker. Et foranstående «med», «hos» eller «og» fjernes samtidig. Eksempler:
   - «Fotballtrening Emilie» → (E) Fotballtrening
   - «K: Øvelseskjøring med Solveig» → (K)(S) Øvelseskjøring
@@ -111,7 +112,7 @@ Radhøyden er 33 px. For linjene de neste dagene er den 32 px.
 - Andre navn (f.eks. Maria, Mariana) blir stående i teksten.
 
 ### 4.4 Høyre kolonne: været i dag
-- Tittelen «Været i dag» (24, fet) står på y=108. Prognosen gjelder **inneværende dag**.
+- Tittelen «Været i dag» (24, fet) står øverst i kolonnen. Prognosen gjelder **inneværende dag**. Fra kl. 16 vises i stedet «Været i morgen» for neste dag, fordi met.no ikke har data for timer som har passert.
 - **Fire like brede felt** (ca. 63 px): kl. **08, 12, 16 og 20**. Hvert felt har:
   - klokkeslett (22, fet) på y=138
   - ikon (sky/regn/snø i skala 1,15, sol i skala 0,85 slik at strålene ikke går inn i nabofeltet)

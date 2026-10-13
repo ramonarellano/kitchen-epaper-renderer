@@ -176,6 +176,12 @@ class ShortTitleTest(unittest.TestCase):
         'Levere i barnehagen': ('', 'Barnehagen'),
         'E6 stengt': ('', 'E6 stengt'),
         'Karis bursdag': ('', 'Karis bursdag'),
+        'A: Middag': ('A', 'Middag'),
+        'Alle: Middag': ('A', 'Middag'),
+        'Alle og K: Kino': ('AK', 'Kino'),
+        'Middag Alle': ('A', 'Middag'),
+        'Foreldremøte for alle': ('', 'Foreldremøte for alle'),
+        'A-hus': ('', 'A-hus'),
     }
 
     def test_cases(self):
@@ -238,6 +244,11 @@ class AgendaLayoutTest(unittest.TestCase):
         shown = self.agenda(events)
         self.assertEqual(shown['later_days'], 1)  # the long day does not fit and is dropped entirely
         self.assertLessEqual(shown['last_baseline'], main.BOTTOM)
+
+    def test_no_tomorrow_heading_without_events(self):
+        self.assertFalse(self.agenda([self.timed(0, '08:30', 'Barnehagen'), self.timed(2, '10:00', 'Tannlege')])['tomorrow_heading'])
+        self.assertTrue(self.agenda([self.allday(1, 'Søppeltømming')])['tomorrow_heading'])
+        self.assertTrue(self.agenda([self.timed(1, '10:00', 'Tannlege')])['tomorrow_heading'])
 
     def test_same_data_gives_identical_image(self):
         events = [self.timed(0, '08:30', 'Barnehagen'), self.allday(1, 'Søppeltømming')]

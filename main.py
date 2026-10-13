@@ -7,7 +7,7 @@ import logging
 import pytz
 
 from sketch import (Sketch, Font, weather_icon, ellipse_pts, bin_icon, tooth_icon, plane_icon, star_icon,
-                    wind_icon, drop_icon, RED, BLUE, GREEN, ORANGE)
+                    wind_icon, drop_icon, BLACK, RED, BLUE, GREEN, ORANGE)
 from seasonal import scene, special_days, next_countdown
 
 # env vars (set these when deploying)
@@ -27,8 +27,8 @@ OSLO_TZ = pytz.timezone('Europe/Oslo')
 FONT_DIR = 'fonts'
 KALAM_REGULAR = os.path.join(FONT_DIR, 'Kalam-Regular.ttf')
 KALAM_BOLD    = os.path.join(FONT_DIR, 'Kalam-Bold.ttf')
-font_now_temp = Font(KALAM_BOLD, 40)     # current temperature
-font_date     = Font(KALAM_BOLD, 36)     # header date
+font_now_temp = Font(KALAM_BOLD, 36)     # current temperature
+font_date     = Font(KALAM_BOLD, 32)     # header date
 font_countdown = Font(KALAM_BOLD, 34)    # "19 dager"
 font_wx_temp  = Font(KALAM_BOLD, 30)     # temperature in the weather cells
 font_title    = Font(KALAM_REGULAR, 29)  # event titles today / tomorrow
@@ -49,12 +49,14 @@ MONTHS = ['januar', 'februar', 'mars', 'april', 'mai', 'juni', 'juli',
           'august', 'september', 'oktober', 'november', 'desember']
 
 # Family members become coloured rings with their initial instead of text.
-# Sources: an initials prefix ("S: Piano", "K&R&E: Høsttreff", "R og S: Tusenfryd")
-# and first names anywhere in the title ("Fotballtrening Emilie", "Øvelseskjøring med Solveig").
-PEOPLE = {'K': RED, 'S': BLUE, 'R': GREEN, 'E': ORANGE}
-NAMES = {'Kari': 'K', 'Ramon': 'R', 'Solveig': 'S', 'Emilie': 'E'}
+# Sources: an initials prefix ("S: Piano", "K&R&E: Høsttreff", "R og S: Tusenfryd", "A: Middag", "Alle: Middag")
+# and first names anywhere in the title ("Fotballtrening Emilie", "Øvelseskjøring med Solveig", "Middag Alle").
+# A (Alle, the whole family) gets a black ring.
+PEOPLE = {'A': BLACK, 'K': RED, 'S': BLUE, 'R': GREEN, 'E': ORANGE}
+NAMES = {'Alle': 'A', 'Kari': 'K', 'Ramon': 'R', 'Solveig': 'S', 'Emilie': 'E'}
 _P = ''.join(PEOPLE)
-PEOPLE_PREFIX = re.compile(rf'^([{_P}](?:(?:\s*[&+,/]\s*|\s+og\s+)[{_P}])*)(?::\s*|\s+)(\S.*)$')
+_WHO = rf'(?:Alle|[{_P}])'
+PEOPLE_PREFIX = re.compile(rf'^({_WHO}(?:(?:\s*[&+,/]\s*|\s+og\s+){_WHO})*)(?::\s*|\s+)(\S.*)$')
 # A name, together with a preceding "med", "hos" or "og"
 NAME_PATTERNS = [(re.compile(rf'\s*(?:\b(?:med|hos|og)\s+)?\b{name}\b'), letter) for name, letter in NAMES.items()]
 
@@ -79,6 +81,7 @@ RX, RE = 522, 776     # right column (weather + season)
 ROW = 33              # agenda row height (today, tomorrow, ongoing)
 LROW = 32             # line height for later days
 BOTTOM = 452          # lowest agenda baseline
+TOP = 98              # first baseline below the header line
 
 
 def load_credentials():
@@ -287,7 +290,7 @@ def _temp(t):
 
 def _draw_header(sk, today):
     date = f"{WEEKDAYS[today.weekday()].capitalize()} {today.day}. {MONTHS[today.month - 1]}"
-    box = sk.text((28, 54), date, font_date)
+    box = sk.text((28, 47), date, font_date)
     return box[2] + 12
 
 
@@ -295,8 +298,8 @@ def _draw_now(sk, current):
     if not current:
         return
     temp = _temp(current['temp'])
-    sk.text((RE - 4, 55), temp, font_now_temp, anchor='rs')
-    weather_icon(sk, current['icon'], RE - 4 - font_now_temp.width(temp) - 54, 16, 46)
+    sk.text((RE - 4, 48), temp, font_now_temp, anchor='rs')
+    weather_icon(sk, current['icon'], RE - 4 - font_now_temp.width(temp) - 50, 14, 42)
 
 
 def _until(d):
@@ -321,8 +324,10 @@ def _draw_agenda(sk, evs, today):
         return len(rows) * row
 
     def layout_end(row, compact_today, compact_tom):
-        y = 108 + (len(ongoing) * row + 10 if ongoing else 0)
+        y = TOP + (len(ongoing) * row + 10 if ongoing else 0)
         y += block_height(today_rows, row, compact_today) + 6
+        if not tom_rows:
+            return y
         return y + row + 2 + block_height(tom_rows, row, compact_tom) - (LROW if compact_tom else row)
 
     for row, compact_today, compact_tomorrow in ((ROW, False, False), (30, False, False),
@@ -341,7 +346,7 @@ def _draw_agenda(sk, evs, today):
             y += row
         return y, y - row
 
-    y = 108
+    y = TOP
     if ongoing:
         sk.rect(LX, y - 27, LW, y - 27 + len(ongoing) * row + 6, width=1.8, amp=0.8)
         for e in ongoing:
@@ -356,12 +361,14 @@ def _draw_agenda(sk, evs, today):
     y, last = draw_block(today_rows, y, compact_today)
     y += 6
 
-    label = sk.text((LX + 8, y), "I morgen", font_section)
-    _icons(sk, label[2] + 10, y - 27, day_icons(evs, tomorrow, today))
-    last = y
-    y += row + 2
-    if tom_rows:
-        y, last = draw_block(tom_rows, y, compact_tomorrow)
+    tom_icons = day_icons(evs, tomorrow, today)
+    if tom_rows or tom_icons:
+        label = sk.text((LX + 8, y), "I morgen", font_section)
+        _icons(sk, label[2] + 10, y - 27, tom_icons)
+        last = y
+        y += row + 2
+        if tom_rows:
+            y, last = draw_block(tom_rows, y, compact_tomorrow)
 
     # Later days (0-3): a day is shown only if all of its events fit
     later = {}
@@ -382,6 +389,7 @@ def _draw_agenda(sk, evs, today):
     if shown:
         sk.dashed((LX + 4, y - 18), (LW, y - 17), dash=8, gap=7, width=1.8, amp=0.6)
     return {'ongoing': len(ongoing), 'today': len(today_rows), 'tomorrow': len(tom_rows),
+            'tomorrow_heading': bool(tom_rows or tom_icons),
             'compact_today': compact_today, 'compact_tomorrow': compact_tomorrow,
             'later_days': shown, 'last_baseline': last}
 
@@ -397,34 +405,34 @@ def _wx_at(hours, d, hour):
 
 
 def _draw_weather(sk, hours, now):
-    """Four cells (08, 12, 16, 20) for today; after 20:00 for tomorrow. Past cells show only the hour."""
+    """Four cells (08, 12, 16, 20) for today; from 16:00 for tomorrow. Past cells show only the hour."""
     day = now.date()
     title = "Været i dag"
-    if now.hour > 20:
+    if now.hour >= 16:
         day += datetime.timedelta(days=1)
         title = "Været i morgen"
-    sk.text((RX + 4, 108), title, font_wx_head)
+    sk.text((RX + 4, TOP), title, font_wx_head)
     cw = (RE - RX) / 4
     for i, hour in enumerate((8, 12, 16, 20)):
         cx = RX + cw * i + cw / 2
-        sk.text((cx, 138), f"{hour:02d}", font_small_b, anchor='ms')
+        sk.text((cx, TOP + 30), f"{hour:02d}", font_small_b, anchor='ms')
         h, precip = _wx_at(hours, day, hour)
         if not h or abs(h['hour'] - hour) > 1:
             # No forecast for an hour that has passed
-            sk.line((cx - 10, 190), (cx + 10, 189), width=2.2, amp=0.4)
+            sk.line((cx - 10, TOP + 82), (cx + 10, TOP + 81), width=2.2, amp=0.4)
             continue
-        weather_icon(sk, h['icon'], cx - 21, 144, 42)
-        sk.text((cx, 208), _temp(h['temp']), font_wx_temp, anchor='ms')
-        wind_icon(sk, cx - 24, 223, 21)
-        sk.text((cx + 2, 238), str(round(h['wind'])), font_small)
+        weather_icon(sk, h['icon'], cx - 21, TOP + 36, 42)
+        sk.text((cx, TOP + 100), _temp(h['temp']), font_wx_temp, anchor='ms')
+        wind_icon(sk, cx - 24, TOP + 115, 21)
+        sk.text((cx + 2, TOP + 130), str(round(h['wind'])), font_small)
         if precip >= 0.1:
-            drop_icon(sk, cx - 20, 249, 14)
-            sk.text((cx - 2, 264), '<1' if precip < 1 else str(round(precip)), font_small_b, color=BLUE)
-    sk.dashed((RX + 6, 276), (RE - 4, 277), dash=8, gap=7, width=1.6, amp=0.6)
+            drop_icon(sk, cx - 20, TOP + 141, 14)
+            sk.text((cx - 2, TOP + 156), '<1' if precip < 1 else str(round(precip)), font_small_b, color=BLUE)
+    sk.dashed((RX + 6, TOP + 168), (RE - 4, TOP + 169), dash=8, gap=7, width=1.6, amp=0.6)
 
 
 def _draw_season(sk, today):
-    x, y, w = RX + 8, 290, RE - RX - 8
+    x, y, w = RX + 8, TOP + 182, RE - RX - 8
     countdown = next_countdown(today)
     if countdown:
         name, left, icon = countdown
@@ -452,12 +460,12 @@ def render_image(events, weather, now=None):
     sk.wave_border(11, 11, 789, 469)
 
     hx = _draw_header(sk, today)
-    _icons(sk, hx, 24, day_icons(evs, today, today))
+    _icons(sk, hx, 20, day_icons(evs, today, today), size=30)
     _draw_now(sk, weather.get('now'))
-    sk.stroke([(24, 72), (400, 73), (776, 74)], width=2.4, amp=0.8)
+    sk.stroke([(24, 62), (400, 63), (776, 64)], width=2.4, amp=0.8)
 
     _draw_agenda(sk, evs, today)
-    sk.stroke([(509, 86), (509.5, 280), (510, 458)], width=1.6, amp=1.2)  # column divider
+    sk.stroke([(509, TOP - 22), (509.5, 280), (510, 458)], width=1.6, amp=1.2)  # column divider
     _draw_weather(sk, weather.get('hours', []), now)
     _draw_season(sk, today)
 
