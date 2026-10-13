@@ -99,7 +99,7 @@ Set the following environment variables for your deployment (Cloud Function, loc
 ---
 
 ## Rendering Details
-Layout follows `docs/DESIGN-kjokkentavle.md` (v5); `docs/kjokkentavle-konsept.html` is the browser prototype.
+Layout follows `design/DESIGN-kjokkentavle.md` (v8); `design/kjokkentavle-konsept.html` is the browser prototype, and `design/kjokkentavle-v8-*.png` are reference renders from the real code.
 - **Style:** hand-drawn look — black handwritten text (Kalam, in `fonts/`, SIL OFL) on white, wobbly lines, `~.~.~` frame.
   All text is at least 22 px so it can be read from across the kitchen.
 - **Header:** date, icons for today's all-day events/holiday, and current weather (icon + temperature)

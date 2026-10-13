@@ -15,7 +15,7 @@
 
 node_modules
 #!include:.gitignore
-docs
+design
 tests
 deploy.sh
 CLAUDE.md

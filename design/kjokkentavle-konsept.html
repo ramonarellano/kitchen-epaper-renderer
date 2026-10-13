@@ -84,15 +84,17 @@ const icon={
 };
 
 // ---------- personer ----------
-const PEOPLE={K:C.r,S:C.b,R:C.g,E:C.o};
-const NAMES={Kari:'K',Ramon:'R',Solveig:'S',Emilie:'E'};
+// A = Alle (hele familien), svart merke
+const PEOPLE={A:C.k,K:C.r,S:C.b,R:C.g,E:C.o};
+const NAMES={Alle:'A',Kari:'K',Ramon:'R',Solveig:'S',Emilie:'E'};
 // Gjør "Fotballtrening Emilie" -> {who:'E', title:'Fotballtrening'}; "Øvelseskjøring med Solveig" + K -> KS
 function people(title,who=''){
   for(const [n,l] of Object.entries(NAMES)){
     const re=new RegExp('\\s*(\\b(med|hos|og)\\s+)?\\b'+n+'\\b','g');
     if(re.test(title)){title=title.replace(re,'');if(!who.includes(l))who+=l;}
   }
-  return {who,title:title.replace(/\s{2,}/g,' ').trim()};
+  // Stryk skilletegn som blir igjen: "Ramon og Solveig: Tog" -> "Tog"
+  return {who,title:title.replace(/\s{2,}/g,' ').replace(/^[\s:,&+\/–-]+|[\s:,&+\/–-]+$/g,'')};
 }
 function badge(x,y,who,sz=1){
   const d=29*sz, step=31*sz;
@@ -104,27 +106,27 @@ function badge(x,y,who,sz=1){
 const bw=(who,sz=1)=>who?who.length*31*sz+6*sz:0;
 const measure=(s,o)=>{const t=T(-999,0,s,o);const w=tw(t);t.remove();return w};
 
-// ---------- tegn tavla (v6) ----------
+// ---------- tegn tavla (v8) ----------
 const LX=26, LW=496, RX=522, RE=776;
-const ROW=33, LROW=32, F={title:29,time:26,head:28,date:36,small:22,later:27};
+const ROW=33, LROW=32, TOP=98, F={title:29,time:26,head:28,date:32,small:22,later:27};
 function draw(D){
   svg.innerHTML='';seed=7;
   waveBorder(11,11,789,469);
 
   // hode
-  T(28,54,D.date,{size:F.date,w:700});
+  T(28,47,D.date,{size:F.date,w:700});
   let hx=28+measure(D.date,{size:F.date,w:700})+14;
-  D.todayIcons.forEach(ic=>{icon[ic](hx,24,1);hx+=40});
-  const nt=measure(D.now.temp,{size:40,w:700});
-  T(RE-4,55,D.now.temp,{size:40,w:700,anchor:'end'});
-  icon[D.now.icon](RE-4-nt-50,22,1.2);
-  line(24,72,776,74,{strokeWidth:2.4});
+  D.todayIcons.forEach(ic=>{icon[ic](hx,20,.94);hx+=38});
+  const nt=measure(D.now.temp,{size:36,w:700});
+  T(RE-4,48,D.now.temp,{size:36,w:700,anchor:'end'});
+  icon[D.now.icon](RE-4-nt-46,16,1.05);
+  line(24,62,776,64,{strokeWidth:2.4});
 
   const later=D.later.map(d=>({dn:d.dn,items:d.ev.map(e=>people(e.title,e.who||''))}));
   const ong=D.ongoing||[];
   const BOTTOM=452;   // siste tillatte grunnlinje
 
-  let y=108;
+  let y=TOP;
   // pågående flerdagshendelser
   if(ong.length){
     R('rectangle',LX,y-27,LW-LX,ong.length*ROW+6,{roughness:1.1,strokeWidth:1.8,...S()});
@@ -139,8 +141,11 @@ function draw(D){
   D.today.forEach(ev=>{row(LX+6,y,people(ev.title,ev.who||''),ev.t);y+=ROW});
   y+=6;
   // i morgen: alle hendelser
-  head(LX,y,'I morgen',D.tomIcons); y+=ROW+2;
-  D.tomEv.forEach(ev=>{row(LX+6,y,people(ev.title,ev.who||''),ev.t);y+=ROW});
+  // "I morgen" utelates når morgendagen er tom
+  if(D.tomEv.length||D.tomIcons.length){
+    head(LX,y,'I morgen',D.tomIcons); y+=ROW+2;
+    D.tomEv.forEach(ev=>{row(LX+6,y,people(ev.title,ev.who||''),ev.t);y+=ROW});
+  }
   // senere: bare hele dager som får plass, i rekkefølge
   const ly0=y+16; let ly=ly0, shown=0;
   for(const d of later.slice(0,3)){
@@ -152,20 +157,21 @@ function draw(D){
   }
   if(shown)line(LX+4,y-18,LW,y-17,{strokeWidth:1.8,roughness:1.2,strokeLineDash:[8,7]});
 
-  line(509,86,510,458,{strokeWidth:1.6,roughness:1.3});
+  line(509,TOP-22,510,458,{strokeWidth:1.6,roughness:1.3});
 
   // høyre: været i dag, fire felt
-  T(RX+4,108,'Været i dag',{size:24,w:700});
+  // Fra kl. 16 vises været i morgen (met.no har ikke data for timer som har passert)
+  T(RX+4,TOP,D.wxTitle||'Været i dag',{size:24,w:700});
   const cw=(RE-RX)/4;
   D.wx.forEach((s,i)=>{const cx=RX+cw*i+cw/2;
-    T(cx,138,s.k,{size:F.small,w:700,anchor:'middle'});
-    if(s.i==='sun')icon.sun(cx-14,152,.85); else icon[s.i](cx-20,146,1.15);
-    T(cx,208,s.t,{size:30,w:700,anchor:'middle'});
-    icon.wind(cx-22,222,.6); T(cx+4,238,String(s.w),{size:F.small});
-    if(s.mm){icon.drop(cx-19,247,.7); T(cx-2,264,s.mm,{size:F.small,w:700,fill:C.b});}
+    T(cx,TOP+30,s.k,{size:F.small,w:700,anchor:'middle'});
+    if(s.i==='sun')icon.sun(cx-14,TOP+44,.85); else icon[s.i](cx-20,TOP+38,1.15);
+    T(cx,TOP+100,s.t,{size:30,w:700,anchor:'middle'});
+    icon.wind(cx-22,TOP+114,.6); T(cx+4,TOP+130,String(s.w),{size:F.small});
+    if(s.mm){icon.drop(cx-19,TOP+139,.7); T(cx-2,TOP+156,s.mm,{size:F.small,w:700,fill:C.b});}
   });
-  line(RX+6,276,RE-4,277,{strokeWidth:1.4,roughness:1.2,strokeLineDash:[8,7]});
-  D.vignette(RX+8,290,RE-RX-8);
+  line(RX+6,TOP+168,RE-4,TOP+169,{strokeWidth:1.4,roughness:1.2,strokeLineDash:[8,7]});
+  D.vignette(RX+8,TOP+182,RE-RX-8);
 }
 // Legger ut "A, (K) B, C" med linjebryting mellom hendelser. dry=true: bare beregn linjer.
 function wrapLater(items,x0,xmax,dry,y){
@@ -218,7 +224,7 @@ function countdown(x,y,w,ic,n,txt){
 const AUTUMN={
   vignette(x,y,w){
     countdown(x,y,w,(a,b)=>icon.pumpkin(a,b+4,.85),'19 dager','til Halloween');
-    const gy=y+162;
+    const gy=y+172;
     icon.leaf(x+204,y+30,.5,C.r,-30);icon.leaf(x+170,y+84,.45,C.y,60);icon.leaf(x+214,y+70,.42,C.o,150);
     icon.mushroom(x+18,gy-50,1.1);icon.mushroom(x+64,gy-32,.7);
     icon.pumpkin(x+112,gy-52,1.1);icon.apple(x+182,gy-34,1);
@@ -229,7 +235,7 @@ const AUTUMN={
 const WINTER={
   vignette(x,y,w){
     countdown(x,y,w,(a,b)=>icon.star(a,b,1.3),'11 dager','til julaften');
-    const gy=y+162;
+    const gy=y+172;
     [[x+214,y+30],[x+200,y+80],[x+14,y+86],[x+40,y+112]].forEach(([a,b],i)=>icon.flake(a,b,i%2?.6:.8));
     icon.tree(x+84,gy-88,1);
     icon.gift(x+24,gy-36,.95,C.r,C.y);icon.gift(x+152,gy-30,.8,C.b,C.r);icon.gift(x+186,gy-40,.95,C.g,C.y);
@@ -256,9 +262,18 @@ const DATA={
   today:[{t:'11:00',title:'Luciatog Solveig og Emilie'},{t:'15:00',title:'Pepperkaker'}],
   tomIcons:['bin'],
   tomEv:[{t:'17:30',title:'Juleavslutning piano Solveig'},{t:'19:30',who:'R',title:'Skvåsj'}],
-  later:[{dn:'tir',ev:[{title:'Mariana'},{title:'Juleavslutning Emilie'}]},{dn:'ons',ev:[{title:'Tannlege'}]},{dn:'tor',ev:[{title:'Yoga Kari'}]}],
+  later:[{dn:'tir',ev:[{title:'Mariana'},{title:'Juleavslutning Emilie'}]},{dn:'ons',ev:[{title:'Tannlege'}]},{dn:'tor',ev:[{title:'Yoga Kari'},{title:'Middag Alle'}]}],
   wx:[{k:'08',i:'snow',t:'−3°',w:1,mm:'1'},{k:'12',i:'cloud',t:'−1°',w:2},{k:'16',i:'cloud',t:'−2°',w:2},{k:'20',i:'cloud',t:'−4°',w:1}]}
 };
+DATA.quiet={...AUTUMN,date:'Tirsdag 13. oktober',wxTitle:'Været i morgen',
+  now:{icon:'rain',temp:'8°'},
+  ongoing:[{title:'Kari Kanariøyene',until:'13/10'},{title:'Maria på sykehuset',until:'18/10'}],
+  todayIcons:[],
+  today:[{t:'18:30',who:'K',title:'Øvelseskjøring med Solveig'},{t:'19:00',who:'S',title:'Piano'},{t:'19:30',title:'Pizzakveld Alle'}],
+  tomIcons:[],tomEv:[],
+  later:[{dn:'tor',ev:[{title:'Mariana'},{who:'KRE',title:'Høsttreff'},{title:'Yoga Kari'}]},
+         {dn:'fre',ev:[{who:'R',title:'Athen'},{title:'Kari på fjellet'}]}],
+  wx:[{k:'08',i:'sun',t:'5°',w:1},{k:'12',i:'sun',t:'10°',w:2},{k:'16',i:'sun',t:'14°',w:2},{k:'20',i:'moon',t:'9°',w:3}]};
 const which=(location.hash||'#autumn').slice(1);
 Promise.all(['400 20px Kalam','700 20px Kalam'].map(f=>document.fonts.load(f))).then(()=>{draw(DATA[which]);document.title='ready'});
 </script>
