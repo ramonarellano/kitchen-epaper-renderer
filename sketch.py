@@ -19,7 +19,7 @@ GREEN  = (0, 255, 0)
 BLUE   = (0, 0, 255)
 RED    = (255, 0, 0)
 YELLOW = (255, 255, 0)
-ORANGE = (255, 165, 0)
+ORANGE = (255, 128, 0)
 PALETTE = [BLACK, WHITE, GREEN, BLUE, RED, YELLOW, ORANGE]
 
 
@@ -176,6 +176,30 @@ class Sketch:
         out.append(pts[-1])
         self.stroke(out, width=width, amp=amp, color=color)
 
+    def wave_border(self, x0, y0, x1, y1, unit=34.0):
+        """Hand-drawn ~.~.~ frame: each edge is split into equal units of a small wave followed by a dot."""
+        def quad(p0, c, p1, n=8):
+            return [((1 - t) ** 2 * p0[0] + 2 * (1 - t) * t * c[0] + t * t * p1[0],
+                     (1 - t) ** 2 * p0[1] + 2 * (1 - t) * t * c[1] + t * t * p1[1]) for t in (i / n for i in range(n + 1))]
+
+        for ax, ay, bx, by in ((x0, y0, x1, y0), (x1, y0, x1, y1), (x1, y1, x0, y1), (x0, y1, x0, y0)):
+            length = math.hypot(bx - ax, by - ay)
+            ux, uy = (bx - ax) / length, (by - ay) / length
+            n = max(1, round(length / unit))
+            step = length / n
+            wl = step - 14
+            at = lambda d, o: (ax + ux * d - uy * o, ay + uy * d + ux * o)
+            for i in range(n):
+                d = i * step + 7
+                pts = quad(at(d, 0), at(d + wl / 4, -6), at(d + wl / 2, 0))
+                pts += quad(at(d + wl / 2, 0), at(d + 3 * wl / 4, 6), at(d + wl, 0))[1:]
+                self.stroke(pts, width=2.2, amp=0.3)
+                self.dot(*at(d + wl + 7, 0), 2.75)
+        self.mark((x0 - 8, y0 - 8, x1 + 8, y0 + 8))
+        self.mark((x0 - 8, y1 - 8, x1 + 8, y1 + 8))
+        self.mark((x0 - 8, y0 - 8, x0 + 8, y1 + 8))
+        self.mark((x1 - 8, y0 - 8, x1 + 8, y1 + 8))
+
     def ink_fill(self, pts):
         self.di.polygon(self._scaled(pts), fill=0)
 
@@ -186,9 +210,15 @@ class Sketch:
         else:
             self.dc.ellipse(box, fill=color)
 
-    def text(self, xy, text, font, anchor='ls', mark_pad=3):
+    def text(self, xy, text, font, anchor='ls', mark_pad=3, color=None):
+        """Text in black ink, or with color= in a flat palette colour (thresholded, no antialiasing)."""
         x, y = xy
-        self.di.text((x * SCALE, y * SCALE), text, font=font.pil, fill=0, anchor=anchor)
+        if color is None:
+            self.di.text((x * SCALE, y * SCALE), text, font=font.pil, fill=0, anchor=anchor)
+        else:
+            mask = Image.new('L', self.color.size, 0)
+            ImageDraw.Draw(mask).text((x * SCALE, y * SCALE), text, font=font.pil, fill=255, anchor=anchor)
+            self.color.paste(color, mask=mask.point(lambda v: 255 if v >= 128 else 0))
         bx = self.di.textbbox((x * SCALE, y * SCALE), text, font=font.pil, anchor=anchor)
         box = tuple(v / SCALE for v in bx)
         self.mark(box, pad=mark_pad)

@@ -1,0 +1,224 @@
+<!doctype html>
+<html><head><meta charset="utf-8">
+<style>
+@font-face{font-family:Kalam;font-weight:400;src:url(node_modules/@fontsource/kalam/files/kalam-latin-400-normal.woff2)}
+@font-face{font-family:Kalam;font-weight:700;src:url(node_modules/@fontsource/kalam/files/kalam-latin-700-normal.woff2)}
+@font-face{font-family:Kalam;font-weight:300;src:url(node_modules/@fontsource/kalam/files/kalam-latin-300-normal.woff2)}
+html,body{margin:0;background:#fff}
+svg{display:block;font-family:Kalam}
+</style>
+<script src="node_modules/roughjs/bundled/rough.js"></script>
+</head><body>
+<svg id="s" width="800" height="480" viewBox="0 0 800 480" xmlns="http://www.w3.org/2000/svg"></svg>
+<script>
+// e-paper palette (7-farge ACeP)
+const C={k:'#000000',w:'#ffffff',g:'#00ff00',b:'#0000ff',r:'#ff0000',y:'#ffff00',o:'#ff8000'};
+const svg=document.getElementById('s');
+const rc=rough.svg(svg);
+let seed=7; const S=()=>({seed:seed++});
+const add=n=>{svg.appendChild(n);return n};
+const R=(fn,...a)=>add(rc[fn](...a));
+function T(x,y,str,o={}){
+  const t=document.createElementNS('http://www.w3.org/2000/svg','text');
+  t.setAttribute('x',x);t.setAttribute('y',y);
+  t.setAttribute('font-size',o.size||17);t.setAttribute('font-weight',o.w||400);
+  t.setAttribute('fill',o.fill||C.k);
+  if(o.anchor)t.setAttribute('text-anchor',o.anchor);
+  if(o.italic)t.setAttribute('font-style','italic');
+  t.textContent=str;add(t);
+  if(o.max){while(t.getComputedTextLength()>o.max&&str.length>3){str=str.slice(0,-1);t.textContent=str.trimEnd()+'…'}}
+  return t;
+}
+const tw=(t)=>t.getComputedTextLength();
+const line=(x1,y1,x2,y2,o={})=>R('line',x1,y1,x2,y2,{roughness:1.1,strokeWidth:1.6,bowing:1.2,...S(),...o});
+
+// ---------- små håndtegnede ikoner ----------
+function g(x,y,s=1){const e=document.createElementNS('http://www.w3.org/2000/svg','g');e.setAttribute('transform',`translate(${x},${y}) scale(${s})`);svg.appendChild(e);return e}
+function inG(el,fn,...a){const n=rc[fn](...a);el.appendChild(n);return n}
+const cloudP='M6 20 C0 20 0 12 6 11 C6 4 15 2 18 8 C21 3 30 5 29 12 C35 12 35 20 29 20 Z';
+const icon={
+  cloud(x,y,s=1){const e=g(x,y,s);inG(e,'path',cloudP,{roughness:.8,strokeWidth:1.5,...S()})},
+  rain(x,y,s=1){const e=g(x,y,s);inG(e,'path',cloudP,{roughness:.8,strokeWidth:1.5,...S()});
+    [[9,24],[16,25],[23,24]].forEach(([a,b])=>inG(e,'line',a,b,a-3,b+7,{stroke:C.b,strokeWidth:2,roughness:.5,...S()}))},
+  snow(x,y,s=1){const e=g(x,y,s);inG(e,'path',cloudP,{roughness:.8,strokeWidth:1.5,...S()});
+    [[9,28],[18,30],[27,27]].forEach(([a,b])=>{inG(e,'line',a-3,b,a+3,b,{stroke:C.b,strokeWidth:1.6,roughness:.3,...S()});inG(e,'line',a,b-3,a,b+3,{stroke:C.b,strokeWidth:1.6,roughness:.3,...S()})})},
+  moon(x,y,s=1){const e=g(x,y,s);inG(e,'path','M20 2 C8 3 4 18 14 26 C20 31 30 28 33 22 C22 25 13 16 20 2 Z',{fill:C.y,fillStyle:'solid',roughness:.9,strokeWidth:1.6,...S()})},
+  sun(x,y,s=1){const e=g(x,y,s);inG(e,'circle',16,16,15,{fill:C.y,fillStyle:'solid',roughness:.8,strokeWidth:1.5,...S()});
+    for(let i=0;i<8;i++){const a=i*Math.PI/4;inG(e,'line',16+Math.cos(a)*11,16+Math.sin(a)*11,16+Math.cos(a)*16,16+Math.sin(a)*16,{strokeWidth:0,roughness:0})}
+    for(let i=0;i<8;i++){const a=i*Math.PI/4;inG(e,'line',16+Math.cos(a)*20,16+Math.sin(a)*20,16+Math.cos(a)*26,16+Math.sin(a)*26,{stroke:C.o,strokeWidth:2,roughness:.4,...S()})}},
+  bin(x,y,s=1){const e=g(x,y,s);inG(e,'path','M4 6 L18 6 L16 22 L6 22 Z',{fill:C.g,fillStyle:'hachure',hachureGap:3,roughness:.7,strokeWidth:1.4,...S()});
+    inG(e,'line',2,5,20,4,{strokeWidth:1.6,roughness:.5,...S()});inG(e,'line',9,2,13,2,{strokeWidth:1.6,roughness:.3,...S()})},
+  star(x,y,s=1,col=C.y){const e=g(x,y,s);let p='';for(let i=0;i<10;i++){const r=i%2?6:14,a=-Math.PI/2+i*Math.PI/5;p+=(i?'L':'M')+(15+r*Math.cos(a)).toFixed(1)+' '+(15+r*Math.sin(a)).toFixed(1)}
+    inG(e,'path',p+'Z',{fill:col,fillStyle:'solid',roughness:.6,strokeWidth:1.4,...S()})},
+  plane(x,y,s=1){const e=g(x,y,s);inG(e,'path','M2 12 L22 10 L28 4 L31 5 L27 11 L31 13 L27 14 L31 20 L28 21 L22 15 L2 13 Z',{fill:C.b,fillStyle:'hachure',hachureGap:2.5,roughness:.5,strokeWidth:1.3,...S()})},
+  tooth(x,y,s=1){const e=g(x,y,s);inG(e,'path','M4 6 C4 0 10 2 12 3 C14 2 20 0 20 6 C20 12 18 14 17 22 C16 24 14 22 14 18 C13 15 11 15 10 18 C10 22 8 24 7 22 C6 14 4 12 4 6 Z',{roughness:.6,strokeWidth:1.4,...S()})},
+  wind(x,y,s=1){const e=g(x,y,s);inG(e,'path','M2 8 L20 8 C27 8 27 0 21 1',{strokeWidth:2.4,roughness:.4,...S()});inG(e,'path','M2 15 L26 15 C33 15 33 23 27 22',{strokeWidth:2.4,roughness:.4,...S()})},
+  drop(x,y,s=1){const e=g(x,y,s);inG(e,'path','M10 0 C14 8 18 12 18 17 C18 23 2 23 2 17 C2 12 6 8 10 0 Z',{fill:C.b,fillStyle:'solid',roughness:.4,strokeWidth:1.4,...S()})},
+  // dekor
+  leaf(x,y,s=1,col=C.o,rot=0){const e=g(x,y,s);e.setAttribute('transform',`translate(${x},${y}) rotate(${rot}) scale(${s})`);
+    inG(e,'path','M0 0 C10 -14 30 -14 40 0 C30 14 10 14 0 0 Z',{fill:col,fillStyle:'solid',roughness:.9,strokeWidth:1.5,...S()});
+    inG(e,'line',-6,0,36,0,{strokeWidth:2.2,roughness:.6,...S()});
+    [[10,0,16,-7],[18,0,24,-8],[26,0,31,-6],[10,0,16,7],[18,0,24,8],[26,0,31,6]].forEach(l=>inG(e,'line',...l,{strokeWidth:2,roughness:.4,...S()}))},
+  mushroom(x,y,s=1){const e=g(x,y,s);
+    inG(e,'path','M14 26 C13 34 13 40 12 46 L28 46 C27 40 27 34 26 26 Z',{fill:C.w,fillStyle:'solid',roughness:.8,strokeWidth:1.5,...S()});
+    inG(e,'path','M0 28 C0 6 40 6 40 28 Z',{fill:C.r,fillStyle:'solid',roughness:.9,strokeWidth:1.6,...S()});
+    [[10,19,6],[21,13,7],[31,21,5],[19,23,4]].forEach(([a,b,d])=>inG(e,'circle',a,b,d,{fill:C.w,fillStyle:'solid',roughness:.4,strokeWidth:1,...S()}))},
+  pumpkin(x,y,s=1){const e=g(x,y,s);
+    inG(e,'path','M24 8 C26 2 28 0 31 -1',{stroke:C.g,strokeWidth:3,roughness:.4,...S()});
+    [[24,22,22,30],[12,22,22,28],[36,22,22,28]].forEach(([a,b,w,h])=>inG(e,'ellipse',a,b,w,h,{fill:C.o,fillStyle:'solid',roughness:.7,strokeWidth:1.5,...S()}));
+    inG(e,'ellipse',24,22,20,30,{fill:C.o,fillStyle:'solid',roughness:.7,strokeWidth:1.5,...S()});},
+  apple(x,y,s=1){const e=g(x,y,s);
+    inG(e,'path','M15 6 C8 0 0 6 1 16 C2 26 9 31 15 28 C21 31 28 26 29 16 C30 6 22 0 15 6 Z',{fill:C.r,fillStyle:'solid',roughness:.8,strokeWidth:1.5,...S()});
+    inG(e,'line',15,6,17,-2,{strokeWidth:2,roughness:.3,...S()});
+    inG(e,'path','M17 0 C20 -6 27 -6 29 -3 C26 1 20 2 17 0 Z',{fill:C.g,fillStyle:'solid',roughness:.5,strokeWidth:1.2,...S()})},
+  tree(x,y,s=1){const e=g(x,y,s);
+    inG(e,'rectangle',22,74,10,12,{fill:C.o,fillStyle:'hachure',hachureGap:2.5,roughness:.6,strokeWidth:1.3,...S()});
+    [[27,10,6,40,48,40],[27,26,2,60,52,60],[27,42,-2,78,56,78]].forEach(([a,b,c,d,e2,f])=>inG(e,'polygon',[[a,b],[c,d],[e2,f]],{fill:C.g,fillStyle:'solid',roughness:.8,strokeWidth:1.5,...S()}));
+    [[20,46,C.r],[34,58,C.y],[16,68,C.b],[40,72,C.r],[30,36,C.b]].forEach(([a,b,c])=>inG(e,'circle',a,b,6,{fill:c,fillStyle:'solid',roughness:.3,strokeWidth:1,...S()}));
+    icon.star(x+12*s,y-6*s,s*1)},
+  gift(x,y,s=1,col=C.r,rib=C.y){const e=g(x,y,s);
+    inG(e,'rectangle',0,10,34,26,{fill:col,fillStyle:'solid',roughness:.7,strokeWidth:1.5,...S()});
+    inG(e,'rectangle',14,10,6,26,{fill:rib,fillStyle:'solid',roughness:.4,strokeWidth:1,...S()});
+    inG(e,'ellipse',11,6,14,9,{roughness:.6,strokeWidth:1.6,...S()});inG(e,'ellipse',23,6,14,9,{roughness:.6,strokeWidth:1.6,...S()})},
+  flake(x,y,s=1){const e=g(x,y,s);for(let i=0;i<3;i++){const a=i*Math.PI/3;inG(e,'line',-10*Math.cos(a),-10*Math.sin(a),10*Math.cos(a),10*Math.sin(a),{stroke:C.b,strokeWidth:1.8,roughness:.3,...S()})}}
+};
+
+// ---------- personbadge ----------
+const PEOPLE={K:C.r,S:C.b,R:C.g,E:C.o,M:C.y};
+function badge(x,y,who){
+  who.split('').forEach((l,i)=>{const cx=x+14+i*31;
+    R('circle',cx,y-9,29,{stroke:PEOPLE[l]||C.k,strokeWidth:3.2,roughness:.5,...S()});
+    T(cx,y-1,l,{size:21,w:700,anchor:'middle'})});
+  return who.length*31+8;
+}
+const measure=(s,o)=>{const t=T(-999,0,s,o);const w=tw(t);t.remove();return w};
+
+// ---------- tegn tavla (v4) ----------
+const LX=26, LW=496, RX=522, RE=776;
+const ROW=34, F={title:29,time:26,head:28,date:36,small:22};
+function draw(D){
+  svg.innerHTML='';seed=7;
+  waveBorder(11,11,789,469);
+
+  // hode: dato (+ hele-dagen-ikoner for i dag) og vær nå
+  T(28,54,D.date,{size:F.date,w:700});
+  let hx=28+measure(D.date,{size:F.date,w:700})+14;
+  D.todayIcons.forEach(ic=>{icon[ic](hx,24,1);hx+=40});
+  const nt=measure(D.now.temp,{size:40,w:700});
+  T(RE-4,55,D.now.temp,{size:40,w:700,anchor:'end'});
+  icon[D.now.icon](RE-4-nt-50,22,1.2);
+  line(24,72,776,74,{strokeWidth:2.4});
+
+  // venstre: i dag (ingen tittel), maks 3
+  let y=108;
+  D.today.slice(0,3).forEach(ev=>{row(LX+6,y,ev);y+=ROW});
+  y+=8;
+  head(LX,y,'I morgen',D.tomIcons,false,D.tomEv.length>3?`+${D.tomEv.length-3} til`:''); y+=ROW+2;
+  D.tomEv.slice(0,3).forEach(ev=>{row(LX+6,y,ev);y+=ROW});
+  y+=4; line(LX+4,y-22,LW,y-21,{strokeWidth:1.8,roughness:1.2,strokeLineDash:[8,7]}); y+=10;
+  D.later.slice(0,3).forEach(d=>{
+    if(y>452)return;
+    T(LX+6,y,d.dn,{size:F.time,w:700});
+    let cx=LX+70;
+    const extra=d.ev.length>1?`+${d.ev.length-1}`:'';
+    const ew=extra?measure(extra,{size:F.small,w:700})+10:0;
+    T(cx,y,d.ev[0],{size:F.title,max:LW-cx-ew});
+    if(extra)T(LW,y,extra,{size:F.small,w:700,anchor:'end'});
+    y+=ROW;
+  });
+
+  line(509,86,510,458,{strokeWidth:1.6,roughness:1.3});
+
+  // høyre: været i morgen, fire felt
+  T(RX+4,108,'Været i morgen',{size:24,w:700});
+  const cw=(RE-RX)/4;
+  D.wx.forEach((s,i)=>{const cx=RX+cw*i+cw/2;
+    T(cx,138,s.k,{size:F.small,w:700,anchor:'middle'});
+    icon[s.i](cx-20,146,1.15);
+    T(cx,208,s.t,{size:30,w:700,anchor:'middle'});
+    icon.wind(cx-22,222,.6); T(cx+4,238,String(s.w),{size:F.small});
+    if(s.mm){icon.drop(cx-19,247,.7); T(cx-2,264,s.mm,{size:F.small,w:700,fill:C.b});}
+  });
+  line(RX+6,276,RE-4,277,{strokeWidth:1.4,roughness:1.2,strokeLineDash:[8,7]});
+
+  D.vignette(RX+8,290,RE-RX-8);
+}
+// ramme: håndtegnet ~.~.~.~ langs alle kanter
+function waveBorder(x1,y1,x2,y2){
+  const edge=(ax,ay,bx,by)=>{
+    const L=Math.hypot(bx-ax,by-ay), ux=(bx-ax)/L, uy=(by-ay)/L, nx=-uy, ny=ux;
+    const unit0=34, n=Math.round(L/unit0), unit=L/n, wl=unit-14;
+    const P=(d,o)=>[(ax+ux*d+nx*o).toFixed(1),(ay+uy*d+ny*o).toFixed(1)].join(' ');
+    for(let i=0;i<n;i++){
+      const d=i*unit+7;
+      R('path',`M${P(d,0)} Q${P(d+wl/4,-6)} ${P(d+wl/2,0)} Q${P(d+3*wl/4,6)} ${P(d+wl,0)}`,{strokeWidth:2.2,roughness:.6,bowing:.5,...S()});
+      const c=d+wl+7; R('circle',+(ax+ux*c).toFixed(1),+(ay+uy*c).toFixed(1),5.5,{fill:C.k,fillStyle:'solid',roughness:.3,strokeWidth:1,...S()});
+    }
+  };
+  edge(x1,y1,x2,y1);edge(x2,y1,x2,y2);edge(x2,y2,x1,y2);edge(x1,y2,x1,y1);
+}
+function head(x,y,label,icons=[],mark,extra){
+  const w=measure(label,{size:F.head,w:700});
+  if(mark)line(x+4,y-6,x+16+w,y-8,{stroke:C.y,strokeWidth:12,roughness:.6,bowing:.4});
+  T(x+8,y,label,{size:F.head,w:700});
+  let cx=x+18+w;
+  icons.forEach(ic=>{icon[ic](cx,y-27,1);cx+=40});
+  if(extra)T(LW,y,extra,{size:F.small,w:700,anchor:'end'});
+}
+function row(x,y,ev){
+  T(x,y,ev.t,{size:F.time,w:700});
+  let cx=x+76;
+  if(ev.who)cx+=badge(cx,y,ev.who);
+  T(cx,y,ev.title,{size:F.title,max:LW-cx});
+}
+
+// ---------- sesonger ----------
+function countdown(x,y,w,ic,n,txt){
+  ic(x+2,y+2);
+  T(x+50,y+30,n,{size:34,w:700});
+  T(x+50,y+58,txt,{size:F.small});
+}
+const AUTUMN={
+  vignette(x,y,w){
+    countdown(x,y,w,(a,b)=>icon.pumpkin(a,b+4,.85),'19 dager','til Halloween');
+    const gy=y+162;
+    icon.leaf(x+204,y+30,.5,C.r,-30);icon.leaf(x+170,y+84,.45,C.y,60);icon.leaf(x+214,y+70,.42,C.o,150);
+    icon.mushroom(x+18,gy-50,1.1);icon.mushroom(x+64,gy-32,.7);
+    icon.pumpkin(x+112,gy-52,1.1);icon.apple(x+182,gy-34,1);
+    R('curve',[[x-4,gy],[x+60,gy-2],[x+130,gy+1],[x+w,gy-1]],{strokeWidth:1.8,roughness:1,...S()});
+    [[x+4,gy],[x+98,gy],[x+172,gy],[x+222,gy]].forEach(([a,b])=>{line(a,b,a-3,b-9,{stroke:C.g,strokeWidth:2,roughness:.4});line(a+3,b,a+5,b-10,{stroke:C.g,strokeWidth:2,roughness:.4})});
+  }
+};
+const WINTER={
+  vignette(x,y,w){
+    countdown(x,y,w,(a,b)=>icon.star(a,b,1.3),'11 dager','til julaften');
+    const gy=y+162;
+    [[x+214,y+30],[x+200,y+80],[x+14,y+86],[x+40,y+112]].forEach(([a,b],i)=>icon.flake(a,b,i%2?.6:.8));
+    icon.tree(x+84,gy-88,1);
+    icon.gift(x+24,gy-36,.95,C.r,C.y);icon.gift(x+152,gy-30,.8,C.b,C.r);icon.gift(x+186,gy-40,.95,C.g,C.y);
+    R('curve',[[x-4,gy],[x+60,gy-3],[x+130,gy+1],[x+w,gy-2]],{strokeWidth:1.8,roughness:1,...S()});
+  }
+};
+
+const DATA={
+ autumn:{...AUTUMN,date:'Mandag 12. oktober',upd:'21:18',
+  now:{icon:'moon',temp:'6°'},
+  todayIcons:[],
+  today:[{t:'08:30',title:'Barnehagen'},{t:'17:00',who:'E',title:'Fotball'}],
+  tomIcons:['bin'],
+  tomEv:[{t:'18:30',who:'K',title:'Øvelseskjøring'},{t:'19:00',who:'S',title:'Piano'},{t:'19:00',title:'Foreldremøte'},{t:'19:30',who:'R',title:'Skvåsj'}],
+  later:[{dn:'ons',ev:['Tannlege']},{dn:'tor',ev:['Mariana','Høsttreff','Middag']},{dn:'fre',ev:['Lunsj']}],
+  wx:[{k:'08',i:'cloud',t:'6°',w:2},{k:'12',i:'cloud',t:'7°',w:4},{k:'16',i:'cloud',t:'8°',w:5},{k:'20',i:'rain',t:'8°',w:3,mm:'2'}]},
+ winter:{...WINTER,date:'Søndag 13. desember',upd:'06:40',
+  now:{icon:'snow',temp:'−3°'},
+  todayIcons:['star'],
+  today:[{t:'11:00',who:'SE',title:'Luciatog'},{t:'15:00',title:'Pepperkaker'}],
+  tomIcons:['bin'],
+  tomEv:[{t:'17:30',who:'S',title:'Juleavslutning'},{t:'19:30',who:'R',title:'Skvåsj'}],
+  later:[{dn:'tir',ev:['Mariana','Juleavslutning']},{dn:'ons',ev:['Tannlege']},{dn:'tor',ev:['Yoga']}],
+  wx:[{k:'08',i:'cloud',t:'−4°',w:1},{k:'12',i:'snow',t:'−2°',w:3,mm:'1'},{k:'16',i:'snow',t:'−2°',w:2,mm:'<1'},{k:'20',i:'cloud',t:'−4°',w:1}]}
+};
+const which=(location.hash||'#autumn').slice(1);
+Promise.all(['400 20px Kalam','700 20px Kalam'].map(f=>document.fonts.load(f))).then(()=>{draw(DATA[which]);document.title='ready'});
+</script>
+</body></html>

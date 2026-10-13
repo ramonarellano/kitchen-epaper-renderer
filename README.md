@@ -99,13 +99,16 @@ Set the following environment variables for your deployment (Cloud Function, loc
 ---
 
 ## Rendering Details
-- **Style:** hand-drawn look — black handwritten text (Kalam, in `fonts/`, SIL OFL) on white, wobbly lines, double frame
-- **Header:** date, week number, Norwegian holiday/merkedag, sunrise–sunset (computed locally) and current weather
-- **Left:** "I dag" card, then the following days compactly with dashed separators. Ongoing/multi-day events show "– til fredag".
+Layout follows `docs/DESIGN-kjokkentavle.md` (v5); `docs/kjokkentavle-konsept.html` is the browser prototype.
+- **Style:** hand-drawn look — black handwritten text (Kalam, in `fonts/`, SIL OFL) on white, wobbly lines, `~.~.~` frame.
+  All text is at least 22 px so it can be read from across the kitchen.
+- **Header:** date, icons for today's all-day events/holiday, and current weather (icon + temperature)
+- **Left:** today's timed events (max 3, no title), "I morgen" with all-day icons and max 3 events ("+N til" for the rest),
+  then up to 3 later days on one line each ("+N" for more). Titles are shown in full and only cut with «…» when they would not fit.
   Title prefixes with initials (`S: Piano`, `K&R&E: …`) become coloured rings per person (see `PEOPLE` in `main.py`);
-  keywords give small icons (søppel, tannlege, fly)
-- **Right:** temperature curve for the rest of today (before 14:00) or tomorrow, with icons, hour, wind and precipitation
-- **Vignette:** countdown to the next holiday plus a seasonal scene (`seasonal.py`); leftover white space gets doodles
+  all-day events get an icon instead of a row (søppel, tannlege, fly, otherwise a star)
+- **Right:** "Været i morgen" at 08, 12, 16 and 20 — icon, temperature, wind (m/s) and precipitation (mm, only when wet)
+- **Season field:** countdown to the next holiday plus a seasonal scene (`seasonal.py`)
 - **Colors:** only the 7 exact panel colors are used, no dithering, so the PNG preview matches the panel
 - **Output:** PNG, JPEG, or raw 7-color (Waveshare format)
 
