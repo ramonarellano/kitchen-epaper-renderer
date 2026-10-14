@@ -16,7 +16,7 @@ fi
 # 2. Deploy
 gcloud functions deploy epaper --gen2 --runtime=python310 --trigger-http --allow-unauthenticated \
   --entry-point=epaper --region=europe-north1 \
-  --set-env-vars=CALENDAR_ID=48otkcqvhjlqlogfkgic7labis@group.calendar.google.com,YR_LAT=59.91,YR_LON=10.75,SECRET_NAME=projects/14548432634/secrets/kitchen-epaper-renderer-google-calendar-secret
+  --set-env-vars=CALENDAR_ID=48otkcqvhjlqlogfkgic7labis@group.calendar.google.com,YR_LAT=59.97,YR_LON=10.78,SECRET_NAME=projects/14548432634/secrets/kitchen-epaper-renderer-google-calendar-secret
 
 # 3. Smoke test the live function with the same request the ESP32 makes
 size=$(curl -sf -o /dev/null -w '%{size_download}' "$URL?format=raw") || {
