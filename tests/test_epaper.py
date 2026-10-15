@@ -123,6 +123,19 @@ class EpaperEndpointTest(unittest.TestCase):
         colors = {c for _, c in img.getcolors(1 << 16)}
         self.assertTrue(colors <= set(PALETTE), f"non-palette colors: {colors - set(PALETTE)}")
 
+    def test_events_fetched_from_midnight_so_past_events_today_stay(self):
+        seen = {}
+
+        def build(name, version, credentials=None):
+            listing = NS(execute=lambda: {'items': []})
+            return NS(events=lambda: NS(list=lambda **kw: seen.update(kw) or listing))
+
+        with mock.patch.object(main, 'build', build):
+            main.get_events()
+        start = datetime.datetime.fromisoformat(seen['timeMin'])
+        self.assertEqual(start.astimezone(main.OSLO_TZ).time(), datetime.time())
+        self.assertEqual(start.astimezone(main.OSLO_TZ).date(), datetime.datetime.now(main.OSLO_TZ).date())
+
     def test_raw_is_packed_7_color_frame(self):
         body, headers = self.call('raw')
         self.assertEqual(headers['Content-Type'], 'application/octet-stream')

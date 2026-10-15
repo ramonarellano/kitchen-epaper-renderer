@@ -103,13 +103,14 @@ def load_credentials():
 def get_events():
     creds   = load_credentials()
     service = build('calendar','v3',credentials=creds)
-    now     = datetime.datetime.utcnow()
+    # From midnight today (Oslo), so today's events stay on the display after they have ended
+    start   = OSLO_TZ.localize(datetime.datetime.combine(datetime.datetime.now(OSLO_TZ).date(), datetime.time()))
     # Fetch up to 14 days ahead to ensure enough events to fill the image
-    then    = now + datetime.timedelta(days=14)
+    then    = start + datetime.timedelta(days=14)
     items   = service.events().list(
         calendarId=CALENDAR_ID,
-        timeMin=now.isoformat()+'Z',
-        timeMax=then.isoformat()+'Z',
+        timeMin=start.isoformat(),
+        timeMax=then.isoformat(),
         singleEvents=True,
         orderBy='startTime'
     ).execute().get('items',[])
