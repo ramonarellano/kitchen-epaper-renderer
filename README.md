@@ -1,158 +1,181 @@
 # kitchen-epaper-renderer
 
-This project renders an image for a Waveshare 7.3" e-paper display, showing:
-- **Weather for Oslo** (from yr.no/Met.no) in 8 two-hour periods (icon, time, temp, precip, wind)
-- **Google Calendar agenda** (multi-day, green event boxes, Norwegian date titles)
-- Modern layout using Roboto font and attractive icons
-- Output formats: PNG, JPEG, or raw 7-color e-paper format (selectable via endpoint query param)
+Renders the family's kitchen board ("Kjøkkentavla") for a Waveshare 7.3" 7-color e-paper display (800×480).
+It runs as a Google Cloud Function and shows, in a hand-drawn style:
+- **Today's date** with icons for today's all-day events and holidays, and the current weather
+- **Agenda** from a Google Calendar: ongoing multi-day events, today, tomorrow and up to 3 later days,
+  with family members shown as coloured rings
+- **Weather** for Kjelsås, Oslo (from met.no) at 08, 12, 16 and 20 — for today, or for tomorrow from 16:00
+- **Season field:** countdown to the next holiday and a seasonal scene, or balloons on someone's birthday
 
 ---
 
-## How it works
-- Fetches weather data from [Met.no Locationforecast API](https://api.met.no/weatherapi/locationforecast/2.0/documentation)
-- Fetches events from a Google Calendar using a service account
-- Renders the image using Pillow (PIL), with robust handling of icons and fonts
-- Exposes a single endpoint (`epaper`) that returns the image in the requested format
+## How it fits together
+
+```mermaid
+flowchart LR
+    ESP[ESP32 + e-paper] -- "GET ?format=raw (hourly)" --> F[Cloud Function epaper]
+    F -- service-account key --> SM[Secret Manager]
+    F -- events, 14 days --> GC[Google Calendar API]
+    F -- forecast --> MET[met.no Locationforecast]
+    F -- "192000-byte 7-color frame" --> ESP
+```
+
+1. The ESP32 (firmware in `../kitchen-epaper-esp32` and `../kitchen-epaper-display`) calls the function about once an hour.
+2. `get_events()` reads the service-account key from Secret Manager and fetches 14 days of events.
+3. `get_weather()` fetches the hourly forecast for `YR_LAT`/`YR_LON`.
+4. `render_image()` draws the board as a PNG that contains only the 7 panel colors.
+5. For `?format=raw` the image is rotated 180° (the panel hangs upside down) and packed 2 pixels per byte.
+
+If the function fails, the display keeps showing its previous image.
 
 ---
 
-## Google Cloud Setup
+## Project layout
 
-### 1. Create a Google Cloud Project
-- Go to [Google Cloud Console Projects](https://console.cloud.google.com/cloud-resource-manager)
-- Click "Create Project"
+| Path | Contents |
+|---|---|
+| `main.py` | Entry point `epaper()`, fetching, parsing of event titles, layout, raw encoder |
+| `sketch.py` | Hand-drawn drawing primitives, fonts, the 7-color palette, weather icons |
+| `seasonal.py` | Holidays, countdowns, seasonal themes and scenes, birthday scene |
+| `tests/test_epaper.py` | End-to-end and layout tests (only the outside services are faked) |
+| `deploy.sh` | Tests, deploy and smoke test; holds the deployed environment variables |
+| `design/` | Design spec `DESIGN-kjokkentavle.md` (v8, Norwegian), browser prototype, reference renders |
+| `fonts/` | Kalam (handwritten font, SIL OFL) |
 
-### 2. Enable APIs
-- Enable the [Google Calendar API](https://console.cloud.google.com/apis/library/calendar.googleapis.com) for your project
-- Enable the [Secret Manager API](https://console.cloud.google.com/apis/library/secretmanager.googleapis.com)
-
-### 3. Create a Service Account
-- Go to [Service Accounts](https://console.cloud.google.com/iam-admin/serviceaccounts)
-- Click "Create Service Account"
-- Give it a name (e.g. `calendar-epaper`)
-- Grant the following roles:
-  - **Secret Manager Secret Accessor** (`roles/secretmanager.secretAccessor`)
-  - **Service Account Token Creator** (`roles/iam.serviceAccountTokenCreator`)
-  - **Viewer** (`roles/viewer`) (optional, for debugging)
-- Click "Done"
-
-### 4. Create and Download Service Account Key
-- Click the service account you just created
-- Go to the "Keys" tab
-- Click "Add Key" > "Create new key" > JSON
-- Download the JSON key file
-
-### 5. Store the Service Account Key in Secret Manager
-- Go to [Secret Manager](https://console.cloud.google.com/security/secret-manager)
-- Click "Create Secret"
-- Name it (e.g. `calendar-sa-key`)
-- Upload the JSON key file
-
-### 5b. Grant Secret Accessor Role to Service Account
-After creating your secret in Secret Manager, you must grant your service account access:
-1. Go to [Secret Manager](https://console.cloud.google.com/security/secret-manager) in Google Cloud Console.
-2. Click on your secret (e.g. `calendar-sa-key`).
-3. Go to the "Permissions" tab.
-4. Click "Grant Access".
-5. Enter your service account email (from the JSON key file).
-6. Add the role: **Secret Manager Secret Accessor** (`roles/secretmanager.secretAccessor`).
-7. Click "Save".
-
-### 5c. Grant Secret Accessor Role to Cloud Function Runtime Accounts
-In addition to your custom service account, you must grant the **Secret Manager Secret Accessor** role to the service account(s) that your Cloud Function runs as. This is required for the function to access secrets at runtime.
-
-Typical accounts to grant:
-- The default Compute Engine service account: `[PROJECT_NUMBER]-compute@developer.gserviceaccount.com`
-- The App Engine default service account: `[PROJECT_ID]@appspot.gserviceaccount.com`
-- Any custom service account you assign to the function
-
-**How to grant access:**
-1. Go to [Secret Manager](https://console.cloud.google.com/security/secret-manager) in Google Cloud Console.
-2. Click on your secret (e.g. `calendar-sa-key`).
-3. Go to the "Permissions" tab.
-4. Click "Grant Access".
-5. Enter the service account email(s) listed above.
-6. Add the role: **Secret Manager Secret Accessor** (`roles/secretmanager.secretAccessor`).
-7. Click "Save".
-
-> Example: For project 14548432634, grant to both `14548432634-compute@developer.gserviceaccount.com` and `kitche-epaper-renderer@appspot.gserviceaccount.com`.
-
-### 6. Share Your Google Calendar with the Service Account
-- Open your Google Calendar in a browser
-- Go to "Settings and sharing" for the calendar you want to use
-- Under "Share with specific people", add the service account's email (from the JSON key file)
-- Give it "Make changes to events" or at least "See all event details"
-
-### 7. Set Environment Variables
-Set the following environment variables for your deployment (Cloud Function, local, etc):
-- `CALENDAR_ID` — The calendar's ID (can be found in calendar settings)
-- `YR_LAT` and `YR_LON` — Latitude and longitude for weather (Oslo: 59.9139, 10.7522)
-- `SECRET_NAME` — The full resource name of your secret, e.g. `projects/<project-id>/secrets/calendar-sa-key`
+Not used by the current code: `icons/`, `fonts/Roboto-Regular.ttf`, `convert_svg_to_png.py`, `fetch_missing_icons.py`
+and `copilot-instructions.md` (left from the first design, before everything was drawn by hand).
 
 ---
 
-## Local Development
-- All assets (icons, fonts) are tracked in git
-- Run locally with the correct environment variables set (see above)
-- Use the `tasks.json` or run your preferred dev server
+## Configuration
+
+The function reads four environment variables. They are set in `deploy.sh`:
+
+| Variable | Meaning | Current value |
+|---|---|---|
+| `CALENDAR_ID` | Google Calendar to show | the family calendar |
+| `YR_LAT`, `YR_LON` | Weather location | `59.97`, `10.78` (Kjelsås) |
+| `SECRET_NAME` | Secret Manager secret with the service-account JSON key | `projects/14548432634/secrets/kitchen-epaper-renderer-google-calendar-secret` |
+
+To move the weather location, change `YR_LAT`/`YR_LON` in `deploy.sh` and deploy.
+Check what the live function uses:
+
+```bash
+gcloud functions describe epaper --gen2 --region=europe-north1 --format="yaml(serviceConfig.environmentVariables,updateTime)"
+```
+
+### Calendar conventions
+- A prefix with initials becomes coloured rings: `S: Piano`, `K&R&E: Høsttreff`, `R og S: Tusenfryd`, `Alle: Middag`.
+  First names in the title work too (`Fotballtrening Emilie`). People and colours are in `PEOPLE` and `NAMES` in `main.py`.
+- All-day events become an icon instead of a row: søppel/avfall → bin, tannlege → tooth, fly/reise → plane, otherwise a star (`EVENT_ICONS`).
+- All-day events with "bursdag" in the title and no person prefix are birthdays: balloons and the name in the season field on the day.
 
 ---
 
-## Rendering Details
-Layout follows `design/DESIGN-kjokkentavle.md` (v8); `design/kjokkentavle-konsept.html` is the browser prototype, and `design/kjokkentavle-v8-*.png` are reference renders from the real code.
-- **Style:** hand-drawn look — black handwritten text (Kalam, in `fonts/`, SIL OFL) on white, wobbly lines, `~.~.~` frame.
-  All text is at least 22 px so it can be read from across the kitchen.
-- **Header:** date, icons for today's all-day events/holiday, and current weather (icon + temperature)
-- **Left:** today's timed events (max 3, no title), "I morgen" with all-day icons and max 3 events ("+N til" for the rest),
-  then up to 3 later days on one line each ("+N" for more). Titles are shown in full and only cut with «…» when they would not fit.
-  Title prefixes with initials (`S: Piano`, `K&R&E: …`) become coloured rings per person (see `PEOPLE` in `main.py`);
-  all-day events get an icon instead of a row (søppel, tannlege, fly, otherwise a star)
-- **Right:** "Været i morgen" at 08, 12, 16 and 20 — icon, temperature, wind (m/s) and precipitation (mm, only when wet)
-- **Season field:** countdown to the next holiday plus a seasonal scene (`seasonal.py`)
-- **Colors:** only the 7 exact panel colors are used, no dithering, so the PNG preview matches the panel
-- **Output:** PNG, JPEG, or raw 7-color (Waveshare format)
+## Rendering rules
+
+Full spec: `design/DESIGN-kjokkentavle.md`; reference renders: `design/kjokkentavle-v8-*.png`. The code wins if they disagree.
+- Only the 7 exact panel colors are used, no dithering, so the PNG preview matches the panel.
+- Everything is drawn at 2× on an ink layer (black, thresholded) and a colour layer (flat palette fills), then flattened.
+- All text is at least 22 px so it can be read from across the kitchen.
+- The wobble of the lines is seeded with the date: the same data on the same day gives an identical image (no ghosting).
+- Today and tomorrow are always shown in full. When space runs out, rows get tighter, then tomorrow and today are listed
+  comma-separated, and later days are dropped (a day is shown with all its events or not at all).
 
 ---
 
-## Testing and deploying
-- Run the tests: `python -m unittest discover -s tests -v` (only Secret Manager, Calendar and met.no are faked)
-- Deploy with `./deploy.sh`: runs the tests, deploys only if they pass, then checks that the live
-  `?format=raw` returns a 192000-byte frame
+## Developing
+
+### Run the tests
+
+```bash
+python -m unittest discover -s tests -v
+```
+
+`deploy.sh` creates `.venv` with `requirements.txt` the first time; `.venv/bin/python` works as the interpreter.
+
+### Preview a render without network
+
+`render_image(events, weather)` takes plain data, so you can render any situation locally:
+
+```bash
+CALENDAR_ID=x YR_LAT=59.97 YR_LON=10.78 SECRET_NAME=x .venv/bin/python -c "
+import main
+open('/tmp/preview.png', 'wb').write(main.render_image([('', '2026-10-14T18:00:00+02:00', '2026-10-14T19:00:00+02:00', 'S: Piano')], {'now': None, 'hours': []}))"
+```
+
+Pass `now=` (an Oslo-time `datetime`) to render another date, for example to see a holiday scene.
+
+### Run the function locally against real data
+
+```bash
+pip install functions-framework
+export CALENDAR_ID=... YR_LAT=59.97 YR_LON=10.78 SECRET_NAME=projects/14548432634/secrets/kitchen-epaper-renderer-google-calendar-secret
+functions-framework --target=epaper --port=8080
+```
+
+Then open `http://localhost:8080/?format=png`. You need gcloud credentials that can read the secret.
+
+### Deploy
+
+```bash
+./deploy.sh
+```
+
+Runs the tests, deploys only if they pass, then checks that the live `?format=raw` returns a 192000-byte frame.
+Never run `gcloud functions deploy` by hand: the env vars live in the script.
 
 ---
 
-## Endpoint Usage
-- `/epaper?format=png` — PNG image (default)
-- `/epaper?format=jpeg` — JPEG image
-- `/epaper?format=raw` — Raw 7-color format for e-paper
+## Endpoint
+
+URL: `https://europe-north1-kitche-epaper-renderer.cloudfunctions.net/epaper`
+
+- `?format=png` — PNG (default)
+- `?format=jpeg` — JPEG
+- `?format=raw` — raw 7-color frame for the panel: 4 bits per pixel, high nibble first, 192000 bytes,
+  palette index 0 black, 1 white, 2 green, 3 blue, 4 red, 5 yellow, 6 orange
+
+The endpoint is public (`--allow-unauthenticated`); see the TODO below.
+
+---
+
+## Google Cloud setup (from scratch)
+
+The project is `kitche-epaper-renderer` (number 14548432634). These steps are only needed to set it up again.
+
+1. **Project and APIs:** create a project and enable the
+   [Google Calendar API](https://console.cloud.google.com/apis/library/calendar.googleapis.com),
+   [Secret Manager API](https://console.cloud.google.com/apis/library/secretmanager.googleapis.com) and Cloud Functions.
+2. **Service account:** create one (e.g. `calendar-epaper`) under
+   [Service Accounts](https://console.cloud.google.com/iam-admin/serviceaccounts) and download a JSON key ("Keys" → "Add Key" → JSON).
+3. **Secret:** store the JSON key in [Secret Manager](https://console.cloud.google.com/security/secret-manager).
+4. **Secret access:** grant **Secret Manager Secret Accessor** (`roles/secretmanager.secretAccessor`) on the secret to the
+   account the function runs as — the default Compute Engine account `14548432634-compute@developer.gserviceaccount.com`
+   (and `kitche-epaper-renderer@appspot.gserviceaccount.com`).
+5. **Share the calendar:** in Google Calendar, "Settings and sharing" → "Share with specific people", add the
+   service account's email with at least "See all event details".
+6. **Configure and deploy:** set the values in `deploy.sh` (see Configuration) and run it.
 
 ---
 
 ## Troubleshooting
-- Ensure all environment variables are set
-- Make sure the service account has access to the calendar and secret
-- Norwegian locale (`nb_NO.UTF-8`) should be available for date formatting (fallbacks are handled)
-- All icons and fonts must be present and tracked in git
+- **Display does not update:** call the endpoint with `?format=png` in a browser and look at the error, or read the logs:
+  `gcloud functions logs read epaper --gen2 --region=europe-north1 --limit=50`.
+- **Calendar errors (403/404):** the calendar is not shared with the service account, or the runtime account cannot read the secret.
+- **Wrong weather place:** check the live env vars with the `gcloud functions describe` command above.
 
 ---
 
-## TODO: Add API Key Security
-- Add a secret in Google Cloud Secret Manager (e.g. `kitchen-epaper-display-apikey`) containing a random API key. (Done)
-- Grant Secret Manager Secret Accessor role to the Cloud Function's runtime service account(s) for this secret. (Done)
-- Set the secret's resource name as an environment variable (e.g. `API_KEY_SECRET_NAME`).
-- In the code, load the API key from Secret Manager at startup.
-- Require clients to provide the API key as a query parameter (`?api_key=...`) or HTTP header (`X-API-Key`).
-- In the endpoint, check the provided key and return 401 Unauthorized if it does not match.
-- Document the usage for clients in the README.
+## TODO: Add API key security
+- A secret with a random key (`kitchen-epaper-display-apikey`) exists, and the runtime account can read it.
+- Left to do: set `API_KEY_SECRET_NAME`, load the key on cold start, require it as `?api_key=` or `X-API-Key`
+  (401 otherwise), and send it from the ESP32.
 
 ---
 
 ## References
-- [Google Cloud Console](https://console.cloud.google.com/)
-- [Met.no Weather API](https://api.met.no/weatherapi/locationforecast/2.0/documentation)
-- [Google Calendar API docs](https://developers.google.com/calendar/api)
-- [Pillow (PIL)](https://pillow.readthedocs.io/en/stable/)
-
----
-
-*This README is intended for developers maintaining or extending this project.*
+- [met.no Locationforecast API](https://api.met.no/weatherapi/locationforecast/2.0/documentation)
+- [Google Calendar API](https://developers.google.com/calendar/api)
+- [Pillow](https://pillow.readthedocs.io/en/stable/)
